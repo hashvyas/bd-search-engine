@@ -30,8 +30,9 @@ def test_validation_reasons(spark, jsonl):
         doc(9, version=-1),
         {"doc_id": "10", "op": "DELETE"},                     # delete needs only doc_id
         doc("", links=[]),
-        doc(11, links="12"),                                  # links must be an array
+        {**doc(11), "links": "12"},                           # links must be an array
         doc(12, version="3"),                                 # numeric strings are accepted
+        doc(13, version="2024-05-01 10:00:00"),               # timestamp-style versions -> epoch seconds
     ])
     accepted, rejected = ij.validate(ij.read_input(spark, path), phase=0)
     reasons = {r["doc_id"]: r["reason"] for r in rejected.collect()}
@@ -40,8 +41,9 @@ def test_validation_reasons(spark, jsonl):
         "6": "missing_text", "7": "unknown_op:RENAME", "8": "invalid_version", "9": "negative_version",
         "": "missing_doc_id", "11": "malformed_json_or_wrong_type"}
     ok = {r["doc_id"]: r for r in accepted.collect()}
-    assert set(ok) == {"1", "2", "10", "12"}
+    assert set(ok) == {"1", "2", "10", "12", "13"}
     assert ok["2"]["links"] == [] and ok["10"]["is_deleted"] and ok["12"]["version"] == 3
+    assert ok["13"]["version"] > 1_700_000_000 and ok["13"]["has_version"] and not ok["1"]["has_version"]
 
 
 def test_dedup_highest_version_wins_then_last_line(spark, jsonl):
@@ -87,4 +89,14 @@ def test_pipeline_links_idempotence_and_snapshot_diff(clean, jsonl):
     assert current_snapshot(spark, "documents") == snap
     live = {r.doc_id for r in ij.live_documents(spark).collect()}
     assert live == {"1", "2", "4"}
-    assert spark.table(table("ingest_log")).count() == 4
+    assert spark.table(table("ingest_log")).count() == 2   # no-change reruns write no log row
+
+
+def test_explicit_versions_beat_phase_order(clean, jsonl):
+    spark = clean
+    ij.run(spark, 0, jsonl([doc(1, title="v5", version=5), doc(2, title="v5", version=5), doc(3, version=1)]))
+    ij.run(spark, 1, jsonl([doc(1, title="stale v3", version=3, op="UPSERT"),   # lower version: loses
+                            doc(2, title="v6", version=6, op="UPSERT"),         # higher version: wins
+                            {"doc_id": "3", "op": "DELETE"}]))                  # no version: later phase wins
+    titles = {r.doc_id: r.title for r in ij.live_documents(spark).collect()}
+    assert titles == {"1": "v5", "2": "v6"}

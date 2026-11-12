@@ -13,3 +13,5 @@ __pycache__/
 spark-warehouse/
 metastore_db/
 derby.log
+docs/Distributed_Search_Engine.pdf
+docs/iceberg_guide.pdf

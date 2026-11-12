@@ -17,7 +17,9 @@ git clone <repo-url> bd-search-engine && cd bd-search-engine
 cp config/cluster.env.example config/cluster.env
 nano config/cluster.env        # ZT_NETWORK_ID now. The NODEx_IP values come after step 2.
 ```
-The values in `cluster.env` must be **identical on all four nodes**. It is gitignored, so share it in your team chat.
+The values in `cluster.env` must be **identical on all four nodes**. It is gitignored, so share it in your team chat. Set `NODE3_USER` to the output of `whoami` on node3.
+
+**node1 only:** `data/` is not in git. Put the course dataset in `data/toy/` (`pages.jsonl`, `changes.json`), or point `PHASE0_FILE`/`PHASE1_FILE` at your copies.
 
 **WSL2 only, once per machine** (from inside WSL):
 ```bash
@@ -113,6 +115,7 @@ To roll serving back without touching Iceberg: `bash scripts/08_pull_and_serve.s
 
 ## Final run on the main corpus
 Copy the main dataset to node1 (for example `data/main/`). Set `PHASE0_FILE` and `PHASE1_FILE` in `cluster.env`. For a clean start, stop everything and on node2 wipe HDFS with `hdfs dfs -rm -r -skipTrash /warehouse /bdse`. Then run steps 7 and 8.
+**Do this early.** The main corpus may carry a `version` field the toy data lacks. Check the `[ingest] reject reasons` line, and `hdfs dfs -cat /bdse/rejects/phase=0/*.json | head`, to be sure valid records are not being rejected.
 
 ## Single-machine rehearsal
 `bash scripts/local_demo.sh` runs the whole flow with `LOCAL_MODE=1` (no HDFS, local Spark) under `~/bigdata/tmp/demo`. It needs Spark plus the Iceberg jar and a Python with fastapi, uvicorn and pyarrow (`SERVE_PY=...`).

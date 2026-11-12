@@ -19,14 +19,14 @@ INPUT_SCHEMA = StructType([
     StructField(CORRUPT, StringType()),
 ])
 
-DOC_COLUMNS = ["doc_id", "url", "title", "text", "links", "version", "phase", "is_deleted"]
+DOC_COLUMNS = ["doc_id", "url", "title", "text", "links", "version", "has_version", "phase", "is_deleted"]
 
 _PROPS = "TBLPROPERTIES ('format-version'='2')"
 
 DDL = {
     "documents": f"""CREATE TABLE IF NOT EXISTS {table('documents')} (
         doc_id STRING, url STRING, title STRING, text STRING,
-        links ARRAY<STRING>, version BIGINT, phase INT, is_deleted BOOLEAN
+        links ARRAY<STRING>, version BIGINT, has_version BOOLEAN, phase INT, is_deleted BOOLEAN
     ) USING iceberg {_PROPS}""",
     "links": f"""CREATE TABLE IF NOT EXISTS {table('links')} (
         src STRING, dst STRING

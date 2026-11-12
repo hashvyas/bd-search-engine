@@ -38,7 +38,8 @@ def copy_single_parquet(spark, df, staging_dir, local_file):
 
 def run(spark, phase):
     docs_snap = current_snapshot(spark, "documents")
-    version = f"v{phase}-{docs_snap}"
+    # The pagerank snapshot changes on every compute run, so rerunning PageRank gives a new export.
+    version = f"v{phase}-{docs_snap}-{current_snapshot(spark, 'pagerank')}"
     export_root = Path(config.EXPORT_DIR)
     final = export_root / version
     if (final / SUCCESS).is_file():

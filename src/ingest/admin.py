@@ -17,7 +17,7 @@ from pyspark.sql import functions as F  # noqa: E402
 from src.common.config import CATALOG, NAMESPACE, table  # noqa: E402
 from src.common.schema import current_snapshot  # noqa: E402
 
-DATA_TABLES = ["documents", "links", "doc_changes"]
+DATA_TABLES = ["documents", "links", "doc_changes", "ingest_log"]
 
 
 def fingerprint(spark, name):

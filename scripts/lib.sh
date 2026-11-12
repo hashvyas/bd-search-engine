@@ -140,6 +140,8 @@ do_pull() {
     [ -n "$version" ] || version="$(cat "$EXPORT_DIR/LATEST")"
     src="$EXPORT_DIR/$version/"
   else
+    [ -n "${NODE3_USER:-}" ] || die "set NODE3_USER in config/cluster.env (run 'whoami' on node3)"
+    : "${NODE3_EXPORT_DIR:=/home/$NODE3_USER/bigdata/exports}"
     local remote="${NODE3_USER}@node3"
     [ -n "$version" ] || version="$(ssh -o BatchMode=yes "$remote" cat "$NODE3_EXPORT_DIR/LATEST")"
     src="$remote:$NODE3_EXPORT_DIR/$version/"
@@ -163,7 +165,8 @@ do_pull() {
 
 serve_reload() {
   local out
-  if ! out="$(curl -sS -f -X POST "http://127.0.0.1:$SERVE_PORT/reload?version=$1" 2>&1)"; then
+  if ! out="$(curl -sS -f -X POST -H "X-Reload-Token: ${RELOAD_TOKEN:-}" \
+      "http://127.0.0.1:$SERVE_PORT/reload?version=$1" 2>&1)"; then
     log "reload response: $out"
     die "server refused version $1; the live version is unchanged"
   fi
@@ -174,9 +177,15 @@ serve_start() {
   local pidf="$PID_DIR/search-api.pid"
   ensure_dirs
   if pid_alive "$pidf"; then log "search API already running (pid $(cat "$pidf"))"; return; fi
+  if curl -sf "http://127.0.0.1:$SERVE_PORT/health" >/dev/null 2>&1; then
+    die "port $SERVE_PORT already answers but $pidf has no live pid: stop that process first"
+  fi
   log "starting search API on 0.0.0.0:$SERVE_PORT (python: $SERVE_PY)"
-  (cd "$REPO_ROOT" && SERVING_DIR="$SERVING_DIR" nohup "$SERVE_PY" -m uvicorn src.serve.app:app \
-      --host 0.0.0.0 --port "$SERVE_PORT" > "$LOG_DIR/search-api.log" 2>&1 & echo $! > "$pidf")
+  # cd first, then background only the server, so $! is the python process (nohup execs it).
+  (cd "$REPO_ROOT" || exit 1
+   SERVING_DIR="$SERVING_DIR" nohup "$SERVE_PY" -m uvicorn src.serve.app:app \
+     --host 0.0.0.0 --port "$SERVE_PORT" > "$LOG_DIR/search-api.log" 2>&1 &
+   echo $! > "$pidf")
   local i
   for i in $(seq 1 30); do
     curl -sf "http://127.0.0.1:$SERVE_PORT/health" >/dev/null 2>&1 && { log "search API is up"; return; }
@@ -187,6 +196,12 @@ serve_start() {
 
 serve_stop() {
   local pidf="$PID_DIR/search-api.pid"
-  if pid_alive "$pidf"; then kill "$(cat "$pidf")" && log "stopped search API"; fi
+  if pid_alive "$pidf"; then
+    local pid i; pid="$(cat "$pidf")"
+    kill "$pid"
+    for i in $(seq 1 10); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid"
+    log "stopped search API"
+  fi
   rm -f "$pidf"
 }

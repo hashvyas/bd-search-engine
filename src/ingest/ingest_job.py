@@ -47,7 +47,9 @@ def validate(df, phase):
          .withColumn("doc_id", F.trim("doc_id"))
          .withColumn("op_raw", F.upper(F.trim(F.coalesce(F.col("op"), F.lit("UPSERT")))))
          .withColumn("op", op_map[F.col("op_raw")])
-         .withColumn("version_num", F.col("version").cast("long")))
+         # Integer versions, or timestamp-style versions (converted to epoch seconds).
+         .withColumn("version_num", F.coalesce(F.col("version").cast("long"),
+                                               F.unix_timestamp(F.to_timestamp(F.col("version"))))))
     upsert = F.col("op") == "UPSERT"
     reason = (F.when(F.col(CORRUPT).isNotNull(), "malformed_json_or_wrong_type")
               .when(F.col("op").isNull(), F.concat(F.lit("unknown_op:"), F.col("op_raw")))
@@ -72,6 +74,7 @@ def validate(df, phase):
         F.filter(F.coalesce(F.col("links"), F.array().cast("array<string>")),
                  lambda x: x.isNotNull() & (F.trim(x) != "")).alias("links"),
         F.coalesce(F.col("version_num"), F.lit(0)).alias("version"),
+        F.col("version_num").isNotNull().alias("has_version"),
         F.lit(phase).cast("int").alias("phase"),
         (F.col("op") == "DELETE").alias("is_deleted"),
         "seq")
@@ -89,7 +92,7 @@ def dedup(accepted):
         "doc_id",
         *[F.when(F.col("is_deleted"), F.lit(None)).otherwise(F.col(c)).alias(c) for c in ("url", "title", "text")],
         F.when(F.col("is_deleted"), F.array().cast("array<string>")).otherwise(F.col("links")).alias("links"),
-        "version", "phase", "is_deleted")
+        "version", "has_version", "phase", "is_deleted")
     superseded = ranked.where("_rn > 1").select(
         "doc_id", F.lit("duplicate_superseded").alias("reason"),
         F.to_json(F.struct("doc_id", "version", "seq")).alias("raw"), "phase")
@@ -98,24 +101,33 @@ def dedup(accepted):
 
 def stage_changes(spark, winners):
     """Keep only incoming rows that win over what is stored. Checkpointed so later
-    reads do not re-evaluate this after the MERGE has changed the target table."""
+    reads do not re-evaluate this after the MERGE has changed the target table.
+
+    If both rows carry an explicit version, the higher version wins and the later phase breaks
+    ties, so a stale update loses even in a later phase. Otherwise the later phase wins, then
+    the higher version. A DELETE has no version, so it beats any earlier-phase row.
+    """
     t = spark.table(table("documents")).select(
-        "doc_id", F.col("phase").alias("t_phase"), F.col("version").alias("t_version"))
+        "doc_id", F.col("phase").alias("t_phase"), F.col("version").alias("t_version"),
+        F.col("has_version").alias("t_has_version"))
     s = winners.join(t, "doc_id", "left")
+    by_version = (F.col("version") > F.col("t_version")) | (
+        (F.col("version") == F.col("t_version")) & (F.col("phase") > F.col("t_phase")))
+    by_phase = (F.col("phase") > F.col("t_phase")) | (
+        (F.col("phase") == F.col("t_phase")) & (F.col("version") > F.col("t_version")))
     wins = (F.col("t_phase").isNull()
-            | (F.col("phase") > F.col("t_phase"))
-            | ((F.col("phase") == F.col("t_phase")) & (F.col("version") > F.col("t_version"))))
+            | F.when(F.col("has_version") & F.col("t_has_version"), by_version).otherwise(by_phase))
     return s.where(wins).select(*DOC_COLUMNS).checkpoint()
 
 
 def merge_documents(spark, staged):
+    """staged holds only winning rows (stage_changes), so every match is an update."""
     staged.createOrReplaceTempView("staged_documents")
     spark.sql(f"""
         MERGE INTO {table('documents')} t
         USING staged_documents s
         ON t.doc_id = s.doc_id
-        WHEN MATCHED AND (s.phase > t.phase OR (s.phase = t.phase AND s.version > t.version))
-          THEN UPDATE SET *
+        WHEN MATCHED THEN UPDATE SET *
         WHEN NOT MATCHED THEN INSERT *
     """)
 
@@ -218,8 +230,10 @@ def run(spark, phase, input_path, file_hash="", file_name=""):
         "links_dropped": reject_counts.get("link_target_missing", 0) + reject_counts.get("self_link", 0),
         "documents_snapshot": after, "links_snapshot": current_snapshot(spark, "links"),
     }
-    log_df = spark.createDataFrame([tuple(summary[c] for c in LOG_SCHEMA_COLS)], LOG_SCHEMA)
-    log_df.withColumn("ingested_at", F.current_timestamp()).writeTo(table("ingest_log")).append()
+    # A rerun that changes nothing writes no log row either, so no table in the namespace gets a new snapshot.
+    if summary["status"] == "applied":
+        log_df = spark.createDataFrame([tuple(summary[c] for c in LOG_SCHEMA_COLS)], LOG_SCHEMA)
+        log_df.withColumn("ingested_at", F.current_timestamp()).writeTo(table("ingest_log")).append()
 
     live = live_documents(spark).count()
     print("[ingest] reject reasons:", reject_counts)

@@ -2,11 +2,12 @@
 
 Run: SERVING_DIR=... uvicorn src.serve.app:app --host 0.0.0.0 --port 8000
 """
+import hmac
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from src.common import config
@@ -53,7 +54,10 @@ def search(q: str = Query(..., min_length=1, max_length=500), k: int = Query(10,
 
 
 @app.post("/reload")
-def reload(version: str):
+def reload(version: str, x_reload_token: str = Header(default="")):
+    token = config.env("RELOAD_TOKEN")
+    if token and not hmac.compare_digest(x_reload_token, token):
+        raise HTTPException(403, "bad or missing X-Reload-Token")
     old = holder.current.version if holder.current else None
     try:
         idx = holder.reload(version)
