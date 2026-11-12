@@ -1,7 +1,3 @@
-"""Load a verified export into memory and swap it in atomically. Never imports pyspark.
-
-CLI: python -m src.serve.loader verify <export_dir>
-"""
 import os
 import re
 import sys
@@ -30,12 +26,11 @@ class Index:
     doc_len: list
     pagerank: list
     max_pagerank: float
-    postings: dict  # term -> [(doc_idx, tf)]
+    postings: dict
     loaded_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 def load_index(export_dir):
-    """Verify and fully build an Index. Raises on any problem and never returns a partial result."""
     manifest = verify_export(export_dir)
     d = Path(export_dir)
     docs = pq.read_table(d / "docs.parquet").to_pydict()
@@ -58,7 +53,6 @@ def load_index(export_dir):
 
 
 class Holder:
-    """Holds the live Index. Readers take one reference. reload() swaps it only on success."""
 
     def __init__(self, serving_dir):
         self.serving_dir = Path(serving_dir)
@@ -69,15 +63,14 @@ class Holder:
         if not VERSION_RE.match(version or ""):
             raise ValueError(f"invalid version name: {version!r}")
         with self._lock:
-            new = load_index(self.serving_dir / version)  # raises -> old version stays live
-            self.current = new  # one reference assignment is atomic
+            new = load_index(self.serving_dir / version)
+            self.current = new
             tmp = self.serving_dir / ".CURRENT.tmp"
             tmp.write_text(version + "\n")
-            os.replace(tmp, self.serving_dir / "CURRENT")  # restart picks up the last good version
+            os.replace(tmp, self.serving_dir / "CURRENT")
             return new
 
     def load_current(self):
-        """On startup, load the version named in SERVING_DIR/CURRENT, if there is one."""
         pointer = self.serving_dir / "CURRENT"
         if pointer.is_file():
             return self.reload(pointer.read_text().strip())
@@ -89,6 +82,6 @@ if __name__ == "__main__":
         sys.exit("usage: python -m src.serve.loader verify <export_dir>")
     try:
         m = load_index(sys.argv[2]).manifest
-    except Exception as e:  # noqa: BLE001 - CLI reports any failure
+    except Exception as e:
         sys.exit(f"VERIFY FAILED: {e}")
     print(f"VERIFY OK version={m['version']} phase={m['phase']} rows={m['row_counts']}")

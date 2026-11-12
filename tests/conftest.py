@@ -1,5 +1,3 @@
-"""Shared fixtures. Spark tests use local[2] with a file:// Iceberg warehouse and are
-skipped if PySpark (from $SPARK_HOME/python) cannot be imported."""
 import glob
 import os
 import sys
@@ -11,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 WORK = Path(tempfile.mkdtemp(prefix="bdse-tests-"))
-os.environ["DATA_ROOT"] = f"file://{WORK}/dfs"   # read by src.common.config at import time
+os.environ["DATA_ROOT"] = f"file://{WORK}/dfs"
 os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
 
 spark_home = os.environ.get("SPARK_HOME", "/opt/spark")
@@ -42,7 +40,6 @@ def spark():
 
 @pytest.fixture
 def clean(spark):
-    """Drop every project table so each test starts empty."""
     from src.common.config import table
     for t in TABLES:
         spark.sql(f"DROP TABLE IF EXISTS {table(t)} PURGE")
@@ -51,7 +48,6 @@ def clean(spark):
 
 @pytest.fixture
 def jsonl(tmp_path):
-    """Write lines (dicts or raw strings) to a .jsonl file and return its file:// path."""
     import json
     counter = iter(range(1000))
 

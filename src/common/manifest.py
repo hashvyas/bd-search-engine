@@ -1,4 +1,3 @@
-"""Export manifest: write it on node3, verify it on node4. Pure Python."""
 import hashlib
 import json
 import os
@@ -25,10 +24,6 @@ def _fsync_write(path, text):
 
 
 def finalize_export(tmp_dir, meta):
-    """Write stats.json, the manifest with checksums, and _SUCCESS last.
-
-    meta must hold version, phase, row_counts and stats. The caller then renames tmp_dir.
-    """
     tmp = Path(tmp_dir)
     _fsync_write(tmp / "stats.json", json.dumps(meta["stats"], indent=2, sort_keys=True))
     manifest = dict(meta, files={name: sha256_file(tmp / name) for name in REQUIRED_FILES})
@@ -38,7 +33,6 @@ def finalize_export(tmp_dir, meta):
 
 
 def verify_export(export_dir):
-    """Return the manifest. Raise ValueError if the export is incomplete or corrupt."""
     d = Path(export_dir)
     if not (d / SUCCESS).is_file():
         raise ValueError(f"{d}: missing {SUCCESS} (export did not finish)")

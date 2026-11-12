@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Node 3: build/update the inverted index, compute PageRank, export Parquet for serving.
-# Usage: bash scripts/07_compute.sh <0|1>
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 PHASE="${1:?usage: 07_compute.sh <0|1>}"

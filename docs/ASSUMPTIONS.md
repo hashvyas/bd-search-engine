@@ -1,6 +1,8 @@
 # Assumptions, decisions and spec gaps
 
-The PDF (`docs/Distributed_Search_Engine.pdf`) is the source of truth. Where it is silent, the decision is listed here. The course PDFs are not in git (the repo is public); download them from the course site into `docs/`.
+The PDF (`docs/Distributed_Search_Engine.pdf`) is the source of truth. Where it is silent, the decision is listed here.
+
+The spec PDF is not in the repo; teammates get it from the course site.
 
 ## Conflicts with or gaps in the PDF
 1. **Phase 1 file name.** The PDF says `changes.jsonl`. The toy dataset ships `changes.json`, and it is JSON lines, not an array. The ingestion job looks at the first character and accepts both formats. `PHASE1_FILE` in `cluster.env` sets the path.
@@ -21,7 +23,7 @@ The PDF (`docs/Distributed_Search_Engine.pdf`) is the source of truth. Where it 
    - `scripts/admin.sh state` fingerprints all four tables.
 9. **Change detection.** After a merge, the job diffs the `documents` snapshot before and after the merge (time travel, `VERSION AS OF`) and appends `added/updated/deleted` rows to `doc_changes`. The indexer keeps its own incremental state: each posting stores the doc's `(phase, version)`, and only docs whose rank changed are re-indexed. This also heals itself after a rollback.
 10. **Normalization.** As in the PDF: `0.7 * bm25 / max_bm25 + 0.3 * pagerank / max_pagerank`. `max_bm25` is taken over the docs that match the query. `max_pagerank` is global, over all live docs. Only docs with at least one query term are returned.
-11. **Serving directory.** The PDF example is `/serving/vN/`. We use `$BDSE_HOME/serving/<version>` (default `~/bigdata/serving`), so no root access is needed. Version names are `v<phase>-<documents snapshot>-<pagerank snapshot>`. Every compute run creates a new pagerank snapshot, so rerunning PageRank yields a new export. Re-exporting the same snapshots is a no-op.
+11. **Serving directory.** The PDF example is `/serving/vN/`. We use `$BDSE_HOME/serving/<version>` (default `~/bigdata/serving`), so no root access is needed. Version names are `v<phase>-<documents snapshot>-<pagerank snapshot>`. Every compute run (`07_compute.sh`) creates a new export version, because the pagerank table gets a new snapshot each time.
 13. **`/reload` auth.** Off by default (lab network). If `RELOAD_TOKEN` is set in `cluster.env`, `/reload` requires a matching `X-Reload-Token` header, and the scripts send it. `/search` and `/health` stay open.
 14. **`NODE3_USER`** has no default (WSL usernames differ). `NODE3_EXPORT_DIR` defaults to `/home/$NODE3_USER/bigdata/exports`.
 12. **PDF overlay.** The tech-stack table on page 5 is cut off by the page overlay. The system summary in the task prompt was used as the fallback.
@@ -36,7 +38,7 @@ The PDF (`docs/Distributed_Search_Engine.pdf`) is the source of truth. Where it 
 ## Design decisions
 - **Tokenizer:** lowercases ASCII A–Z only, splits on `[^a-z0-9]+`, drops tokens shorter than 2 characters and a small stopword list. Non-ASCII letters act as separators ("Café" → "caf", "Zürich" → "rich"). Accented queries therefore look odd, but they match the index exactly. This guarantees exact parity between `tokenize.py` (server) and the Spark built-in functions (indexer). There is no Python UDF, so executors need no project code and `--py-files` is not needed. The title is indexed together with the text. Wikitext markup is not stripped, so tokens like `thumb` and `px` exist. That is acceptable for this scale.
 - **PageRank:** DataFrames. Dangling mass is spread evenly (ranks sum to 1). Default 20 iterations; fewer than 10 raises an error. Reliable checkpoint to `DATA_ROOT/checkpoints` every 3 iterations. The final ranks replace the `pagerank` table (`createOrReplace`, which keeps Iceberg history).
-- **Export:** Spark writes single-file Parquet to HDFS staging. The driver copies it to node3's local disk and writes `stats.json`, `manifest.json` (sha256 of every file, row counts, Iceberg snapshot ids) and `_SUCCESS` last, then `rename()`s the directory and updates `LATEST`. If the version directory already exists and is complete, export is a no-op.
+- **Export:** Spark writes single-file Parquet to HDFS staging. The driver copies it to node3's local disk and writes `stats.json`, `manifest.json` (sha256 of every file, row counts, Iceberg snapshot ids) and `_SUCCESS` last, then `rename()`s the directory and updates `LATEST`. Every compute run produces a new version directory, because the pagerank snapshot is part of the name.
 - **Serving swap:** the loader verifies `_SUCCESS`, the manifest, the checksums and the row counts, builds every structure, then assigns one reference. `CURRENT` is written only after a successful swap, and a restart reloads it. `/reload` returns 409 and keeps the old version on any failure.
 - **Spark binding:** HDFS daemons bind `0.0.0.0` and advertise `nodeX` (`dfs.datanode.hostname`, `use.datanode.hostname`). Spark master and workers bind to the node's ZeroTier IP (`SPARK_LOCAL_IP`), because Spark standalone advertises its bind address and `0.0.0.0` would be unreachable. Drivers bind `0.0.0.0`, advertise `spark.driver.host = NODE_IP` and use fixed driver and block-manager ports.
 - **Hostname trap:** `03_hosts.sh` comments out `127.x` lines that name `node1`–`node4`. Otherwise daemons bind to loopback.

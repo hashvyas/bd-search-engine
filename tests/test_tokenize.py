@@ -1,4 +1,3 @@
-"""Python tokenizer rules and parity with the Spark built-in implementation."""
 from collections import Counter
 
 from src.common.tokenize import tokenize
@@ -14,8 +13,8 @@ SAMPLES = [
 
 def test_python_rules():
     assert tokenize("The Quick brown FOX, the fox!") == ["quick", "brown", "fox", "fox"]
-    assert tokenize("a I x2 of") == ["x2"]          # stopwords and 1-char tokens dropped
-    assert tokenize("Café") == ["caf"]              # non-ASCII acts as a separator
+    assert tokenize("a I x2 of") == ["x2"]
+    assert tokenize("Café") == ["caf"]
     assert tokenize(None) == []
 
 

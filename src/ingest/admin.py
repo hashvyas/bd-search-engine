@@ -1,4 +1,4 @@
-"""Iceberg inspection and recovery helpers (run through scripts/admin.sh).
+USAGE = """Iceberg inspection and recovery helpers (run through scripts/admin.sh).
 
   state                      snapshot id, row count and content fingerprint for each table
   snapshots <table>          snapshot history
@@ -12,16 +12,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from pyspark.sql import functions as F  # noqa: E402
+from pyspark.sql import functions as F
 
-from src.common.config import CATALOG, NAMESPACE, table  # noqa: E402
-from src.common.schema import current_snapshot  # noqa: E402
+from src.common.config import CATALOG, NAMESPACE, table
+from src.common.schema import current_snapshot
 
 DATA_TABLES = ["documents", "links", "doc_changes", "ingest_log"]
 
 
 def fingerprint(spark, name):
-    """Order-independent hash of a table's contents."""
     df = spark.table(table(name))
     return df.agg(F.count("*").alias("rows"), F.coalesce(F.sum(F.xxhash64(*df.columns)), F.lit(0)).alias("h")).first()
 
@@ -57,7 +56,7 @@ def main(argv):
     elif cmd == "rollback":
         spark.sql(f"CALL {CATALOG}.system.rollback_to_snapshot('{NAMESPACE}.{args[0]}', {int(args[1])})").show()
     else:
-        sys.exit(__doc__)
+        sys.exit(USAGE)
     spark.stop()
 
 

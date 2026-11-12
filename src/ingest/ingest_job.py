@@ -1,11 +1,3 @@
-"""Phase ingestion: validate -> dedup -> MERGE into Iceberg -> sync links -> diff snapshots -> log.
-
-Idempotence: an incoming row is staged only if its rank (phase, version) is higher
-than the stored row's rank, or if the doc is new. When nothing qualifies, no MERGE
-runs, so the data tables get no new snapshot.
-
-Usage: spark-submit ingest_job.py --phase 0 --input hdfs://.../pages.jsonl --file-hash <sha256>
-"""
 import argparse
 import json
 import sys
@@ -13,10 +5,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from pyspark.sql import Window, functions as F  # noqa: E402
+from pyspark.sql import Window, functions as F
 
-from src.common.config import DATA_ROOT, table  # noqa: E402
-from src.common.schema import CORRUPT, DOC_COLUMNS, INPUT_SCHEMA, current_snapshot, ensure_tables  # noqa: E402
+from src.common.config import DATA_ROOT, table
+from src.common.schema import CORRUPT, DOC_COLUMNS, INPUT_SCHEMA, current_snapshot, ensure_tables
 
 OP_ALIASES = {"UPSERT": "UPSERT", "INSERT": "UPSERT", "UPDATE": "UPSERT", "DELETE": "DELETE"}
 LOG_SCHEMA = ("phase int, file_name string, file_hash string, status string, records_read bigint, "
@@ -26,7 +18,6 @@ LOG_SCHEMA_COLS = [c.split()[0] for c in LOG_SCHEMA.split(", ")]
 
 
 def read_input(spark, path):
-    """Read JSON lines, or a single JSON array (detected from the first character)."""
     first = spark.read.text(path).limit(1).collect()
     multiline = bool(first) and first[0][0].lstrip().startswith("[")
     df = (spark.read.schema(INPUT_SCHEMA)
@@ -34,20 +25,16 @@ def read_input(spark, path):
           .option("columnNameOfCorruptRecord", CORRUPT)
           .option("multiLine", multiline)
           .json(path))
-    # seq keeps file order (it is used to break ties between duplicates). cache() is
-    # needed before Spark lets us filter on the corrupt-record column alone.
     return df.withColumn("seq", F.monotonically_increasing_id()).cache()
 
 
 def validate(df, phase):
-    """Return (accepted, rejected). rejected has: doc_id, reason, raw, phase."""
     op_map = F.create_map(*[F.lit(x) for kv in OP_ALIASES.items() for x in kv])
-    blank = lambda c: F.col(c).isNull() | (F.trim(F.col(c)) == "")  # noqa: E731
+    blank = lambda c: F.col(c).isNull() | (F.trim(F.col(c)) == "")
     d = (df
          .withColumn("doc_id", F.trim("doc_id"))
          .withColumn("op_raw", F.upper(F.trim(F.coalesce(F.col("op"), F.lit("UPSERT")))))
          .withColumn("op", op_map[F.col("op_raw")])
-         # Integer versions, or timestamp-style versions (converted to epoch seconds).
          .withColumn("version_num", F.coalesce(F.col("version").cast("long"),
                                                F.unix_timestamp(F.to_timestamp(F.col("version"))))))
     upsert = F.col("op") == "UPSERT"
@@ -70,7 +57,6 @@ def validate(df, phase):
 
     accepted = d.where(F.col("reason").isNull()).select(
         "doc_id", "url", "title", "text",
-        # links are optional (40 toy records have none). Blank or null entries are dropped.
         F.filter(F.coalesce(F.col("links"), F.array().cast("array<string>")),
                  lambda x: x.isNotNull() & (F.trim(x) != "")).alias("links"),
         F.coalesce(F.col("version_num"), F.lit(0)).alias("version"),
@@ -82,12 +68,9 @@ def validate(df, phase):
 
 
 def dedup(accepted):
-    """Keep one row per doc_id: highest version wins, and the later line breaks ties.
-    Returns (winners, superseded)."""
     w = Window.partitionBy("doc_id").orderBy(F.col("version").desc(), F.col("seq").desc())
     ranked = accepted.withColumn("_rn", F.row_number().over(w))
     winners = ranked.where("_rn = 1").select(*DOC_COLUMNS)
-    # A DELETE keeps no payload: the tombstone only blocks lower-ranked re-inserts.
     winners = winners.select(
         "doc_id",
         *[F.when(F.col("is_deleted"), F.lit(None)).otherwise(F.col(c)).alias(c) for c in ("url", "title", "text")],
@@ -100,13 +83,6 @@ def dedup(accepted):
 
 
 def stage_changes(spark, winners):
-    """Keep only incoming rows that win over what is stored. Checkpointed so later
-    reads do not re-evaluate this after the MERGE has changed the target table.
-
-    If both rows carry an explicit version, the higher version wins and the later phase breaks
-    ties, so a stale update loses even in a later phase. Otherwise the later phase wins, then
-    the higher version. A DELETE has no version, so it beats any earlier-phase row.
-    """
     t = spark.table(table("documents")).select(
         "doc_id", F.col("phase").alias("t_phase"), F.col("version").alias("t_version"),
         F.col("has_version").alias("t_has_version"))
@@ -121,7 +97,6 @@ def stage_changes(spark, winners):
 
 
 def merge_documents(spark, staged):
-    """staged holds only winning rows (stage_changes), so every match is an update."""
     staged.createOrReplaceTempView("staged_documents")
     spark.sql(f"""
         MERGE INTO {table('documents')} t
@@ -138,12 +113,6 @@ def live_documents(spark, snapshot=None):
 
 
 def sync_links(spark, phase):
-    """Make the links table equal to the edges between live docs.
-
-    Edges to a missing or deleted doc are dropped. documents.links keeps the raw
-    list, so an edge comes back if its target is re-added later.
-    Returns (inserted, deleted, dropped_df).
-    """
     live = live_documents(spark)
     ids = live.select(F.col("doc_id").alias("dst"))
     edges = live.select(F.col("doc_id").alias("src"), F.explode("links").alias("dst")).distinct()
@@ -171,7 +140,6 @@ def sync_links(spark, phase):
 
 
 def snapshot_diff(spark, before, after):
-    """Return doc ids that changed between two documents snapshots: doc_id, change_type."""
     def state(snap):
         if snap is None:
             return spark.table(table("documents")).select("doc_id").limit(0).withColumn("rev", F.lit(None).cast("string"))
@@ -230,7 +198,6 @@ def run(spark, phase, input_path, file_hash="", file_name=""):
         "links_dropped": reject_counts.get("link_target_missing", 0) + reject_counts.get("self_link", 0),
         "documents_snapshot": after, "links_snapshot": current_snapshot(spark, "links"),
     }
-    # A rerun that changes nothing writes no log row either, so no table in the namespace gets a new snapshot.
     if summary["status"] == "applied":
         log_df = spark.createDataFrame([tuple(summary[c] for c in LOG_SCHEMA_COLS)], LOG_SCHEMA)
         log_df.withColumn("ingested_at", F.current_timestamp()).writeTo(table("ingest_log")).append()

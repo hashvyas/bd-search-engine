@@ -21,6 +21,7 @@ node4 FastAPI: rsync, verify, swap in memory, BM25 x 0.7 + PageRank x 0.3, web p
 - One-machine rehearsal: `bash scripts/local_demo.sh`
 - Fault-tolerance demo: [docs/FAULT_TOLERANCE.md](docs/FAULT_TOLERANCE.md)
 - Decisions, spec gaps and versions: [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)
+- The spec PDF is not in the repo; teammates get it from the course site.
 
 ## Layout
 ```

@@ -1,13 +1,9 @@
-"""Input schema and Iceberg table DDL (Spark side only)."""
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 
 from src.common.config import table
 
 CORRUPT = "_corrupt_record"
 
-# Field names come from data/toy. `version` and `op` are optional. `version` is read as a
-# string and cast later, so "3" and 3 are both accepted and anything else is rejected
-# with a reason instead of failing the whole record.
 INPUT_SCHEMA = StructType([
     StructField("doc_id", StringType()),
     StructField("url", StringType()),
@@ -54,7 +50,6 @@ def ensure_tables(spark, names):
 
 
 def current_snapshot(spark, name):
-    """Current snapshot id of an Iceberg table, or None if it has none yet."""
     rows = spark.sql(
         f"SELECT snapshot_id FROM {table(name)}.history "
         "WHERE is_current_ancestor ORDER BY made_current_at DESC LIMIT 1").collect()

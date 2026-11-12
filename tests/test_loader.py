@@ -1,11 +1,10 @@
-"""Export verification and atomic swap: a bad export never replaces the live version."""
 import pytest
 
 pa = pytest.importorskip("pyarrow")
-import pyarrow.parquet as pq  # noqa: E402
+import pyarrow.parquet as pq
 
-from src.common.manifest import finalize_export  # noqa: E402
-from src.serve.loader import Holder  # noqa: E402
+from src.common.manifest import finalize_export
+from src.serve.loader import Holder
 
 
 def make_export(root, version, docs):

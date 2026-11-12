@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Shared helpers. Source this file; do not run it.
-# The pipeline steps (do_ingest, do_compute, do_pull) live here so that the cluster
-# scripts 06-08 and local_demo.sh run the same code.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -17,14 +14,11 @@ role_node() {
 
 load_env() {
   set -a
-  # shellcheck disable=SC1091
   . "$REPO_ROOT/config/versions.env"
-  # shellcheck disable=SC1091
   [ -f "$HOME/.bigdata_env" ] && . "$HOME/.bigdata_env"
   if [ "${LOCAL_MODE:-0}" != 1 ]; then
     [ -f "$REPO_ROOT/config/cluster.env" ] \
       || die "config/cluster.env missing: cp config/cluster.env.example config/cluster.env and fill it in"
-    # shellcheck disable=SC1091
     . "$REPO_ROOT/config/cluster.env"
   fi
   : "${BDSE_HOME:=$HOME/bigdata}"
@@ -53,7 +47,6 @@ load_env() {
     : "${WAREHOUSE:=hdfs://node2:$HDFS_NAMENODE_PORT/warehouse}"
     : "${SPARK_MASTER_URL:=spark://node3:$SPARK_MASTER_PORT}"
   fi
-  # Spark needs the Python 3.10 env. The server only needs fastapi, uvicorn and pyarrow.
   if [ -z "${SPARK_PY:-}" ]; then
     if [ -x "$BDSE_VENV/bin/python" ]; then SPARK_PY="$BDSE_VENV/bin/python"; else SPARK_PY=python3; fi
   fi
@@ -66,7 +59,6 @@ load_env() {
 
 ensure_dirs() { mkdir -p "$PID_DIR" "$LOG_DIR" "$CONF_DIR" "$SERVING_DIR"; }
 
-# render <template> <output>: substitute only the ${VARS} that appear in the template, and fail if one is unset.
 render() {
   local tpl="$1" out="$2" vars v
   vars="$(grep -o '\${[A-Za-z_][A-Za-z0-9_]*}' "$tpl" | sort -u | tr -d '${}' || true)"
@@ -88,9 +80,8 @@ spark_submit() {
   local props="$CONF_DIR/job.properties"
   ensure_dirs
   [ -f "$CONF_DIR/iceberg.conf" ] || die "$CONF_DIR/iceberg.conf missing (run 04_configure.sh)"
-  # --properties-file replaces spark-defaults.conf, so merge the two into one file.
   if [ "${LOCAL_MODE:-0}" = 1 ]; then
-    { cat "$CONF_DIR/iceberg.conf"; echo "spark.sql.shuffle.partitions=4"; echo "spark.ui.enabled=false"; } > "$props"
+    { cat "$CONF_DIR/iceberg.conf"; echo "spark.sql.shuffle.partitions=4"; echo "spark.ui.enabled=false"; echo "spark.sql.session.timeZone=UTC"; } > "$props"
   else
     cat "$SPARK_CONF_DIR/spark-defaults.conf" "$CONF_DIR/iceberg.conf" > "$props"
   fi
@@ -132,7 +123,6 @@ do_compute() {
   grep -q '^EXPORT_VERSION=' "$LOG_DIR/export-phase$phase.log" || die "export did not report a version"
 }
 
-# do_pull [version]: copy an export into SERVING_DIR, verify it, then ask the server to switch to it.
 do_pull() {
   local version="${1:-}" src
   ensure_dirs
@@ -156,7 +146,7 @@ do_pull() {
     die "export $version failed verification; the live version is unchanged"
   fi
   if [ -d "$SERVING_DIR/$version" ]; then
-    rm -rf "$staging"   # already pulled earlier. The server verifies it again on reload.
+    rm -rf "$staging"
   else
     mv "$staging" "$SERVING_DIR/$version"
   fi
@@ -181,7 +171,6 @@ serve_start() {
     die "port $SERVE_PORT already answers but $pidf has no live pid: stop that process first"
   fi
   log "starting search API on 0.0.0.0:$SERVE_PORT (python: $SERVE_PY)"
-  # cd first, then background only the server, so $! is the python process (nohup execs it).
   (cd "$REPO_ROOT" || exit 1
    SERVING_DIR="$SERVING_DIR" nohup "$SERVE_PY" -m uvicorn src.serve.app:app \
      --host 0.0.0.0 --port "$SERVE_PORT" > "$LOG_DIR/search-api.log" 2>&1 &

@@ -1,8 +1,3 @@
-"""BM25 + PageRank ranking. Formula and IDF follow docs/bm25_snippet.py.
-
-The snippet reads doc length from the index rows, which do not have a length
-column. Here the length comes from docs.parquet instead (see ASSUMPTIONS.md).
-"""
 import math
 
 
@@ -11,10 +6,6 @@ def idf(n_docs, df):
 
 
 def bm25_scores(query_terms, index, k1=1.2, b=0.75):
-    """Return {doc_idx: bm25} for docs that contain at least one query term.
-
-    Like the snippet, a repeated query term counts once per occurrence.
-    """
     avgdl = max(index.avgdl, 1.0)
     scores = {}
     for term in query_terms:
@@ -29,7 +20,6 @@ def bm25_scores(query_terms, index, k1=1.2, b=0.75):
 
 
 def rank(query_terms, index, k=10, k1=1.2, b=0.75, w_bm25=0.7, w_pr=0.3):
-    """Final = 0.7 * bm25/max(bm25 over matching docs) + 0.3 * pagerank/max(pagerank over all docs)."""
     scores = bm25_scores(query_terms, index, k1, b)
     if not scores:
         return []

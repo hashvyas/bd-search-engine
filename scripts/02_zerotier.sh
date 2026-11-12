@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-# Install ZeroTier if it is missing, then join ZT_NETWORK_ID from config/cluster.env. Safe to re-run.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 load_env
 [[ "${ZT_NETWORK_ID:-}" =~ ^[0-9a-fA-F]{16}$ ]] || die "set ZT_NETWORK_ID (16 hex chars) in config/cluster.env"
 
 if ! command -v zerotier-cli >/dev/null; then
-  # The official installer adds ZeroTier's GPG-signed apt repository, so apt verifies the package.
   log "installing ZeroTier"
   curl -fsSL https://install.zerotier.com -o /tmp/zt-install.sh
   sudo bash /tmp/zt-install.sh
 fi
 
 if ! sudo zerotier-cli info >/dev/null 2>&1; then
-  # WSL without systemd: run the service as a background daemon.
   sudo systemctl enable --now zerotier-one 2>/dev/null || sudo zerotier-one -d
   sleep 3
 fi

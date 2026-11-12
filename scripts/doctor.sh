@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Read-only health check for one role. Prints PASS/FAIL for each check. Changes nothing.
-# Usage: bash scripts/doctor.sh <ingest|storage|compute|serve>
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 ROLE="${1:?usage: doctor.sh <ingest|storage|compute|serve>}"
@@ -11,9 +9,8 @@ fail() { printf 'FAIL  %s\n' "$*"; FAILS=$((FAILS + 1)); }
 check() { local name="$1"; shift; if out="$("$@" 2>&1)"; then pass "$name${out:+: $out}"; else fail "$name${out:+: $out}"; fi; }
 
 if [ -f "$REPO_ROOT/config/cluster.env" ]; then pass "config/cluster.env present"; else fail "config/cluster.env missing (cp config/cluster.env.example config/cluster.env)"; fi
-LOCAL_MODE=1 load_env   # load_env without dying on a missing cluster.env, then add cluster values if present
+LOCAL_MODE=1 load_env
 set -a
-# shellcheck disable=SC1091
 [ -f "$REPO_ROOT/config/cluster.env" ] && . "$REPO_ROOT/config/cluster.env"
 set +a
 
@@ -21,7 +18,7 @@ java_ok() { local v; v="$("${JAVA_HOME:-/usr}/bin/java" -version 2>&1 | awk -F'"
 hadoop_ok() { local v; v="$("$HADOOP_HOME/bin/hadoop" version 2>/dev/null | awk 'NR==1{print $2}')"; echo "${v:-not found}"; [ "$v" = "$HADOOP_VERSION" ]; }
 spark_ok() { local v; v="$(ls "$SPARK_HOME"/jars/spark-core_*.jar 2>/dev/null | sed -E 's/.*-([0-9.]+)\.jar/\1/')"; echo "${v:-not found}"; [ "$v" = "$SPARK_VERSION" ]; }
 iceberg_ok() { local f; f="$(cd "$SPARK_HOME/jars" 2>/dev/null && ls iceberg-spark-runtime-*.jar 2>/dev/null | tr '\n' ' ')"; echo "${f:-none}"; [ "$f" = "$ICEBERG_JAR " ]; }
-py_imports() {  # <python> <modules...>
+py_imports() {
   local py="$1"; shift
   PYTHONPATH="$SPARK_HOME/python:$(ls "$SPARK_HOME"/python/lib/py4j-*-src.zip 2>/dev/null | head -1)" \
     "$py" -c "import sys; [__import__(m) for m in sys.argv[1:]]; print('%s %d.%d' % (sys.executable, *sys.version_info[:2]))" "$@"

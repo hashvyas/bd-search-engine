@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Node 1: upload a phase file to HDFS and run the ingestion job on the Spark master on node3.
-# Usage: bash scripts/06_ingest.sh <0|1> [file]   (default file: PHASE0_FILE / PHASE1_FILE from cluster.env)
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 PHASE="${1:?usage: 06_ingest.sh <0|1> [file]}"

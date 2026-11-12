@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Node 4: start the search API if needed, pull the latest (or given) export from node3,
-# verify it, and switch to it. Any failure keeps the current version live.
-# Usage: bash scripts/08_pull_and_serve.sh [version]
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 load_env

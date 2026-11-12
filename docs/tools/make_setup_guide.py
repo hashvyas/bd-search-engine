@@ -1,11 +1,8 @@
-"""Builds docs/Setup_Guide.pdf with the standard library only. Edit the content below, then run:
-    python3 docs/tools/make_setup_guide.py docs/Setup_Guide.pdf
-Keep it in sync with docs/RUNBOOK.md."""
 import sys
 import textwrap
 
-W, H, M = 595, 842, 50          # A4 points, margin
-STYLE = {  # font, size, leading, wrap chars
+W, H, M = 595, 842, 50
+STYLE = {
     "title": ("F2", 20, 26, 50), "h1": ("F2", 14, 20, 70), "h2": ("F2", 11.5, 16, 85),
     "p": ("F1", 10, 13.5, 100), "li": ("F1", 10, 13.5, 95), "code": ("F3", 8.6, 11, 100),
     "small": ("F1", 8.5, 11, 115),
@@ -180,7 +177,7 @@ def layout():
         before = {"title": 0, "h1": 12, "h2": 6, "code": 2, "p": 2, "li": 0, "small": 0}[kind]
         block = before + lead * len(lines) + (6 if kind == "code" else 0)
         if kind in ("h1", "h2"):
-            block += 40  # keep a heading with what follows
+            block += 40
         if y - block < M and block < H - 2 * M:
             newpage()
         y -= before

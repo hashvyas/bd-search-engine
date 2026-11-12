@@ -1,8 +1,3 @@
-"""Runtime settings read from the environment.
-
-The scripts source config/versions.env and config/cluster.env (or the
-LOCAL_MODE defaults in scripts/lib.sh) before they start a job. Pure Python.
-"""
 import os
 import sys
 from pathlib import Path
@@ -18,8 +13,6 @@ def env(name, default=None):
 LOCAL_MODE = env("LOCAL_MODE", "0") == "1"
 CATALOG = "iceberg_catalog"
 NAMESPACE = env("ICEBERG_NAMESPACE", "search")
-# DATA_ROOT holds raw uploads, rejects, checkpoints and export staging.
-# Cluster: hdfs://node2:9000/bdse. Local mode: file:///.../dfs
 DATA_ROOT = env("DATA_ROOT", "hdfs://node2:9000/bdse").rstrip("/")
 EXPORT_DIR = env("EXPORT_DIR", str(Path.home() / "bigdata" / "exports"))
 SERVING_DIR = env("SERVING_DIR", str(Path.home() / "bigdata" / "serving"))
@@ -39,6 +32,5 @@ def table(name):
 
 
 def add_repo_to_path():
-    """Let spark-submit'ed scripts import src.* (only the driver needs it: there are no Python UDFs)."""
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))

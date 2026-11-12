@@ -1,12 +1,11 @@
-"""Validation, dedup, link cleanup, idempotent merge, snapshot diff (Spark + Iceberg)."""
 import pytest
 
 pytest.importorskip("pyspark")
-from pyspark.sql import functions as F  # noqa: E402
+from pyspark.sql import functions as F
 
-from src.common.config import table  # noqa: E402
-from src.common.schema import current_snapshot  # noqa: E402
-from src.ingest import ingest_job as ij  # noqa: E402
+from src.common.config import table
+from src.common.schema import current_snapshot
+from src.ingest import ingest_job as ij
 
 
 def doc(i, links=(), **kw):
@@ -19,8 +18,8 @@ def doc(i, links=(), **kw):
 def test_validation_reasons(spark, jsonl):
     path = jsonl([
         doc(1),
-        '{"doc_id": "broken", "url":',                        # truncated JSON, like data/toy
-        {k: v for k, v in doc(2).items() if k != "links"},    # links are optional
+        '{"doc_id": "broken", "url":',
+        {k: v for k, v in doc(2).items() if k != "links"},
         doc(3, url=""),
         doc(4, url="not-a-url"),
         doc(5, title="  "),
@@ -28,11 +27,11 @@ def test_validation_reasons(spark, jsonl):
         doc(7, op="RENAME"),
         doc(8, version="abc"),
         doc(9, version=-1),
-        {"doc_id": "10", "op": "DELETE"},                     # delete needs only doc_id
+        {"doc_id": "10", "op": "DELETE"},
         doc("", links=[]),
-        {**doc(11), "links": "12"},                           # links must be an array
-        doc(12, version="3"),                                 # numeric strings are accepted
-        doc(13, version="2024-05-01 10:00:00"),               # timestamp-style versions -> epoch seconds
+        {**doc(11), "links": "12"},
+        doc(12, version="3"),
+        doc(13, version="2024-05-01 10:00:00"),
     ])
     accepted, rejected = ij.validate(ij.read_input(spark, path), phase=0)
     reasons = {r["doc_id"]: r["reason"] for r in rejected.collect()}
@@ -62,16 +61,14 @@ def test_pipeline_links_idempotence_and_snapshot_diff(clean, jsonl):
     s0 = ij.run(spark, 0, phase0, "h0")
     assert s0["status"] == "applied" and s0["docs_changed"] == 3 and s0["duplicates"] == 1
     links = {(r.src, r.dst) for r in spark.table(table("links")).collect()}
-    assert links == {("1", "2"), ("1", "3"), ("2", "1"), ("3", "2")}   # missing target and self-link dropped
+    assert links == {("1", "2"), ("1", "3"), ("2", "1"), ("3", "2")}
     assert s0["links_dropped"] == 2
 
-    # Rerunning the same phase changes nothing: no new snapshot, same contents.
     snaps = (current_snapshot(spark, "documents"), current_snapshot(spark, "links"))
     again = ij.run(spark, 0, phase0, "h0")
     assert again["status"] == "no_change" and again["docs_changed"] == 0
     assert (current_snapshot(spark, "documents"), current_snapshot(spark, "links")) == snaps
 
-    # Phase 1: delete 3, update 2, add 4 (which links to the deleted 3 and to 1).
     phase1 = jsonl([{"doc_id": "3", "op": "DELETE"}, doc(2, ["1"], title="Doc 2 new", op="UPSERT"),
                     doc(4, ["3", "1"], op="UPSERT")])
     before = current_snapshot(spark, "documents")
@@ -83,20 +80,19 @@ def test_pipeline_links_idempotence_and_snapshot_diff(clean, jsonl):
     assert links == {("1", "2"), ("2", "1"), ("4", "1")}
     assert s1["links_deleted"] == 2 and s1["links_inserted"] == 1
 
-    # Re-ingesting Phase 0 after Phase 1 loses on rank (phase 0 < 1): tombstones block re-inserts.
     snap = current_snapshot(spark, "documents")
     assert ij.run(spark, 0, phase0, "h0")["status"] == "no_change"
     assert current_snapshot(spark, "documents") == snap
     live = {r.doc_id for r in ij.live_documents(spark).collect()}
     assert live == {"1", "2", "4"}
-    assert spark.table(table("ingest_log")).count() == 2   # no-change reruns write no log row
+    assert spark.table(table("ingest_log")).count() == 2
 
 
 def test_explicit_versions_beat_phase_order(clean, jsonl):
     spark = clean
     ij.run(spark, 0, jsonl([doc(1, title="v5", version=5), doc(2, title="v5", version=5), doc(3, version=1)]))
-    ij.run(spark, 1, jsonl([doc(1, title="stale v3", version=3, op="UPSERT"),   # lower version: loses
-                            doc(2, title="v6", version=6, op="UPSERT"),         # higher version: wins
-                            {"doc_id": "3", "op": "DELETE"}]))                  # no version: later phase wins
+    ij.run(spark, 1, jsonl([doc(1, title="stale v3", version=3, op="UPSERT"),
+                            doc(2, title="v6", version=6, op="UPSERT"),
+                            {"doc_id": "3", "op": "DELETE"}]))
     titles = {r.doc_id: r.title for r in ij.live_documents(spark).collect()}
     assert titles == {"1": "v5", "2": "v6"}

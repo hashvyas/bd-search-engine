@@ -1,7 +1,3 @@
-"""FastAPI search service (node4). Reads only the Parquet export. No Spark, HDFS or Iceberg.
-
-Run: SERVING_DIR=... uvicorn src.serve.app:app --host 0.0.0.0 --port 8000
-"""
 import hmac
 import logging
 from contextlib import asynccontextmanager
@@ -25,7 +21,7 @@ async def lifespan(_app):
     try:
         idx = holder.load_current()
         log.info("loaded %s", idx.version if idx else "nothing (no CURRENT yet)")
-    except Exception as e:  # noqa: BLE001 - start empty rather than crash
+    except Exception as e:
         log.error("could not load CURRENT export: %s", e)
     yield
 
@@ -45,7 +41,7 @@ def health():
 
 @app.get("/search")
 def search(q: str = Query(..., min_length=1, max_length=500), k: int = Query(10, ge=1, le=100)):
-    idx = holder.current  # one reference read: a concurrent reload cannot mix versions
+    idx = holder.current
     if idx is None:
         raise HTTPException(503, "no index loaded")
     s = idx.manifest["stats"]
@@ -56,12 +52,12 @@ def search(q: str = Query(..., min_length=1, max_length=500), k: int = Query(10,
 @app.post("/reload")
 def reload(version: str, x_reload_token: str = Header(default="")):
     token = config.env("RELOAD_TOKEN")
-    if token and not hmac.compare_digest(x_reload_token, token):
+    if token and not hmac.compare_digest(x_reload_token.encode("utf-8"), token.encode("utf-8")):
         raise HTTPException(403, "bad or missing X-Reload-Token")
     old = holder.current.version if holder.current else None
     try:
         idx = holder.reload(version)
-    except Exception as e:  # noqa: BLE001 - any failure keeps the old version
+    except Exception as e:
         log.error("reload of %s failed, keeping %s: %s", version, old, e)
         raise HTTPException(409, {"error": str(e), "live_version": old})
     log.info("switched %s -> %s", old, idx.version)

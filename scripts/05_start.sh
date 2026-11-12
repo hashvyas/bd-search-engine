@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Start this role's daemons directly. No start-dfs.sh, ssh loops or systemd (WSL does not
-# guarantee them). Pid files live in $BDSE_HOME/pids. Safe to re-run.
-# Usage: bash scripts/05_start.sh <ingest|storage|compute|serve>
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 ROLE="${1:?usage: 05_start.sh <ingest|storage|compute|serve>}"
@@ -19,10 +16,9 @@ start_master() {
 }
 start_worker() {
   if pid_alive "$PID_DIR/spark-$USER-org.apache.spark.deploy.worker.Worker-1.pid"; then log "spark worker already running"
-  else "$SPARK_HOME/sbin/start-worker.sh" "$MASTER"; fi   # the worker keeps retrying until the master is up
+  else "$SPARK_HOME/sbin/start-worker.sh" "$MASTER"; fi
 }
 format_namenode_once() {
-  # Format only if the name dir has never been formatted. -nonInteractive also refuses to reformat.
   if [ -f "$BDSE_HOME/hdfs/name/current/VERSION" ]; then log "NameNode already formatted"
   else hdfs namenode -format -nonInteractive -clusterId bdse-cluster; fi
 }

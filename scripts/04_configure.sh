@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Render the config templates for one role into ~/bigdata/conf. $SPARK_HOME/conf and
-# $HADOOP_HOME/etc/hadoop are never modified. Safe to re-run.
-# Usage: bash scripts/04_configure.sh <ingest|storage|compute|serve>
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 ROLE="${1:?usage: 04_configure.sh <ingest|storage|compute|serve>}"

@@ -1,10 +1,3 @@
-"""PageRank with DataFrames over the live documents and the links table.
-
-PR(v) = (1-d)/N + d * (sum over u->v of PR(u)/out(u) + dangling_mass/N)
-The rank of dangling nodes (no out-links) is spread evenly, so the ranks sum to 1.
-A reliable checkpoint every k iterations cuts lineage. After a lost executor,
-Spark recomputes from the last checkpoint instead of from iteration 0.
-"""
 import argparse
 import hashlib
 import sys
@@ -13,14 +6,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from pyspark.sql import functions as F  # noqa: E402
+from pyspark.sql import functions as F
 
-from src.common import config  # noqa: E402
-from src.common.config import table  # noqa: E402
+from src.common import config
+from src.common.config import table
 
 
 def pagerank(nodes, edges, iterations, damping=0.85, checkpoint_every=3, sleep_per_iter=0.0, log=print):
-    """nodes: doc_id. edges: src, dst (both must be in nodes). Returns doc_id, pagerank."""
     if iterations < config.MIN_PAGERANK_ITERATIONS:
         raise ValueError(f"PageRank needs at least {config.MIN_PAGERANK_ITERATIONS} iterations")
     nodes = nodes.select("doc_id").distinct().cache()
@@ -47,12 +39,11 @@ def pagerank(nodes, edges, iterations, damping=0.85, checkpoint_every=3, sleep_p
         log(f"[pagerank] iteration {i}/{iterations} L1 delta={delta:.3e} dangling mass={dangling:.4f}"
             + (" (checkpointed)" if i % checkpoint_every == 0 else ""))
         if sleep_per_iter:
-            time.sleep(sleep_per_iter)  # only to give fault_demo.sh time to kill a worker mid-job
+            time.sleep(sleep_per_iter)
     return ranks
 
 
 def digest(rows):
-    """Order-independent fingerprint of a PageRank result, used to compare runs."""
     lines = sorted(f"{r['doc_id']}:{r['pagerank']:.10f}" for r in rows)
     return hashlib.sha256("\n".join(lines).encode()).hexdigest()
 

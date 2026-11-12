@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Write node1..node4 into /etc/hosts as a managed block. Safe to re-run.
-#
-# WSL: WSL rewrites /etc/hosts at every start unless /etc/wsl.conf contains
-#   [network]
-#   generateHosts = false
-# Then run `wsl --shutdown` from Windows and re-run this script.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 load_env
@@ -14,8 +8,6 @@ for i in 1 2 3 4; do
 done
 
 new="$(mktemp)"
-# Drop the old managed block. Also comment out loopback lines that name node1-4: if nodeX
-# resolved to 127.0.1.1, daemons would bind to loopback and other nodes could not reach them.
 sed -e '/^# BEGIN bd-search-engine$/,/^# END bd-search-engine$/d' \
     -e 's/^\(127\.[0-9.]*[[:space:]].*\bnode[1-4]\b.*\)$/# \1  # disabled by bd-search-engine/' /etc/hosts > "$new"
 {

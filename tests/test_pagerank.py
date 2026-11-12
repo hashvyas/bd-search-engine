@@ -1,12 +1,10 @@
-"""PageRank against known small graphs."""
 import pytest
 
 pytest.importorskip("pyspark")
-from src.compute.pagerank import pagerank  # noqa: E402
+from src.compute.pagerank import pagerank
 
 
 def reference(nodes, edges, iters, d=0.85):
-    """Plain-Python power iteration with dangling mass spread evenly."""
     n = len(nodes)
     out = {u: [v for (s, v) in edges if s == u] for u in nodes}
     pr = {u: 1.0 / n for u in nodes}
@@ -32,7 +30,7 @@ def test_cycle_is_uniform(spark):
 
 
 def test_dangling_node_matches_reference_and_sums_to_one(spark):
-    nodes = ["a", "b", "c", "d", "e"]   # d is dangling, e is isolated
+    nodes = ["a", "b", "c", "d", "e"]
     edges = [("a", "b"), ("a", "c"), ("b", "c"), ("c", "a"), ("c", "d")]
     pr = run(spark, nodes, edges, iters=15)
     assert pr == pytest.approx(reference(nodes, edges, 15), abs=1e-12)

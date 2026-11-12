@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# Spark + HDFS fault-tolerance demo. Run on node3 once the cluster and Phase 0 are up.
-#  1. Baseline PageRank digest.
-#  2. Rerun PageRank slowly, kill a Spark worker and its executors mid-job (kill -9), check that
-#     the job still finishes with the same digest, then restart the worker.
-#  3. Write a file with replication 2, stop node3's DataNode, read the file and the Iceberg
-#     table through the replica on node2, then restart the DataNode.
-# Usage: bash scripts/fault_demo.sh [node3|node2]   (node2 kills the remote worker over ssh as NODE3_USER)
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 load_env

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Stop this role's daemons through their pid files. Safe to re-run.
-# Usage: bash scripts/05_stop.sh <ingest|storage|compute|serve>
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 ROLE="${1:?usage: 05_stop.sh <ingest|storage|compute|serve>}"

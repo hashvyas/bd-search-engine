@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Install what one role needs, checked against config/versions.env. Safe to re-run.
-# Usage: bash scripts/01_install.sh <ingest|storage|compute|serve>
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 ROLE="${1:?usage: 01_install.sh <ingest|storage|compute|serve>}"
 role_node "$ROLE" >/dev/null
-# shellcheck disable=SC1091
 . "$REPO_ROOT/config/versions.env"
 PREFIX="${INSTALL_PREFIX:-/opt}"
 BDSE_VENV="${BDSE_VENV:-$HOME/.venvs/bdse}"
@@ -15,10 +12,9 @@ SPARK_ROLE=0; [ "$ROLE" != serve ] && SPARK_ROLE=1
 
 sudo_if_needed() { if [ -w "$1" ]; then shift; "$@"; else shift; sudo "$@"; fi; }
 
-# Read the hex digest from any checksum file format (BSD, GNU or split into groups).
 checksum_from() { tr -d ' \n\r\t' < "$1" | grep -oE "[0-9a-fA-F]{$2}" | head -1 | tr 'A-F' 'a-f'; }
 
-download_verified() {  # <url> <dest> <sha1|sha256|sha512>
+download_verified() {
   local url="$1" dest="$2" algo="$3" len expected actual
   case "$algo" in sha1) len=40 ;; sha256) len=64 ;; sha512) len=128 ;; esac
   log "downloading $url"
@@ -56,7 +52,6 @@ install_java() {
   export JAVA_HOME
 }
 
-# install_tarball <name> <wanted version> <home var> <url> <version cmd>
 install_tarball() {
   local name="$1" want="$2" var="$3" url="$4" vcmd="$5" home have
   home="${!var:-$PREFIX/$name}"
@@ -103,7 +98,7 @@ install_uv() {
   log "uv $(uv --version) installed"
 }
 
-pyspark_works() {  # <python>: can this interpreter run a tiny PySpark job with the installed Spark?
+pyspark_works() {
   PYTHONPATH="$SPARK_HOME/python:$(ls "$SPARK_HOME"/python/lib/py4j-*-src.zip)" PYSPARK_PYTHON="$1" timeout 180 "$1" - <<'EOF' >/dev/null 2>&1
 from pyspark.sql import SparkSession
 s = SparkSession.builder.master("local[1]").config("spark.ui.enabled", "false").getOrCreate()
@@ -139,7 +134,6 @@ install_python_env() {
 
 write_env_file() {
   cat > "$HOME/.bigdata_env" <<EOF
-# Written by bd-search-engine/scripts/01_install.sh ($ROLE)
 export BDSE_HOME="$BDSE_HOME"
 export BDSE_VENV="$BDSE_VENV"
 export JAVA_HOME="${JAVA_HOME:-}"
@@ -158,7 +152,7 @@ EOF
 
 log "installing role '$ROLE'"
 apt_install curl ca-certificates rsync openssh-client gettext-base
-[ "$ROLE" = compute ] && apt_install openssh-server   # node4 pulls exports from here over ssh
+[ "$ROLE" = compute ] && apt_install openssh-server
 
 if [ $SPARK_ROLE = 1 ]; then
   install_java
