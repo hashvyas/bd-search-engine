@@ -1,0 +1,7 @@
+# Installed into the Python 3.10 env by scripts/01_install.sh. PySpark comes from $SPARK_HOME/python, not pip.
+pyarrow==17.0.0
+numpy==1.26.4
+fastapi==0.115.6
+uvicorn==0.32.1
+pytest==8.3.4
+httpx==0.28.1

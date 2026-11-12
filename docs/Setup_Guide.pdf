@@ -1,0 +1,203 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [7 0 R 9 0 R 11 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Length 4783 >>
+stream
+BT 0.15 0.3 0.55 rg /F2 20 Tf 50 766.0 Td (Distributed Search Engine - Team Setup Guide) Tj ET
+BT 0 g /F1 8.5 Tf 50 755.0 Td (Big Data 2026 \(UE24CS343AB2\). For Ubuntu 24.04 VMs or WSL2. Repo: bd-search-engine. Full details: docs/RUNBOOK.md) Tj ET
+0.2 0.35 0.6 RG 0.8 w 50 730.0 m 545 730.0 l S
+BT 0.15 0.3 0.55 rg /F2 14 Tf 50 715.0 Td (1. Who runs what) Tj ET
+0.94 0.95 0.97 rg 46 650.0 503 61.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 699.0 Td (Node   Role arg   Runs                                               Teammate) Tj ET
+BT 0 g /F3 8.6 Tf 50 688.0 Td (node1  ingest     client only: dataset, ingestion driver             ________) Tj ET
+BT 0 g /F3 8.6 Tf 50 677.0 Td (node2  storage    HDFS NameNode + DataNode, Spark worker             ________) Tj ET
+BT 0 g /F3 8.6 Tf 50 666.0 Td (node3  compute    Spark master + worker, DataNode, compute drivers   ________) Tj ET
+BT 0 g /F3 8.6 Tf 50 655.0 Td (node4  serve      FastAPI search service + web page                  ________) Tj ET
+BT 0 g /F1 10 Tf 50 633.5 Td (Every script is idempotent: re-running it is safe. Always run from the repo root as: bash) Tj ET
+BT 0 g /F1 10 Tf 50 620.0 Td (scripts/<name>.sh. Minimum per machine: 2 CPU cores, 4 GB RAM \(node2/node3\), 10 GB free disk.) Tj ET
+0.2 0.35 0.6 RG 0.8 w 50 603.0 m 545 603.0 l S
+BT 0.15 0.3 0.55 rg /F2 14 Tf 50 588.0 Td (2. Before you start \(every machine\)) Tj ET
+BT 0 g /F1 10 Tf 50 574.5 Td (- Ubuntu 24.04 \(VM or WSL2\) with sudo rights and internet access.) Tj ET
+BT 0 g /F1 10 Tf 50 561.0 Td (- A ZeroTier account. ONE teammate creates the network at my.zerotier.com and shares the) Tj ET
+BT 0 g /F1 10 Tf 50 547.5 Td (  16-character Network ID.) Tj ET
+BT 0 g /F1 10 Tf 50 534.0 Td (- Agree on ONE config/cluster.env for the team. It is gitignored, so share it in your team) Tj ET
+BT 0 g /F1 10 Tf 50 520.5 Td (  chat. The values must be identical on all four nodes.) Tj ET
+BT 0 g /F2 11.5 Tf 50 498.5 Td (WSL2 only \(once per Windows machine\)) Tj ET
+BT 0 g /F1 10 Tf 50 483.0 Td (Inside Ubuntu \(WSL\) run:) Tj ET
+0.94 0.95 0.97 rg 46 407.0 503 72.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 467.0 Td (sudo tee /etc/wsl.conf >/dev/null <<'EOF') Tj ET
+BT 0 g /F3 8.6 Tf 50 456.0 Td ([boot]) Tj ET
+BT 0 g /F3 8.6 Tf 50 445.0 Td (systemd=true) Tj ET
+BT 0 g /F3 8.6 Tf 50 434.0 Td ([network]) Tj ET
+BT 0 g /F3 8.6 Tf 50 423.0 Td (generateHosts = false) Tj ET
+BT 0 g /F3 8.6 Tf 50 412.0 Td (EOF) Tj ET
+BT 0 g /F1 10 Tf 50 390.5 Td (Then in Windows PowerShell: wsl --shutdown, and reopen Ubuntu. Give WSL enough memory: create) Tj ET
+BT 0 g /F1 10 Tf 50 377.0 Td (%UserProfile%\\.wslconfig with the two lines [wsl2] and memory=4GB. Without generateHosts = false,) Tj ET
+BT 0 g /F1 10 Tf 50 363.5 Td (WSL rewrites /etc/hosts on every start and the node names stop resolving.) Tj ET
+0.2 0.35 0.6 RG 0.8 w 50 346.5 m 545 346.5 l S
+BT 0.15 0.3 0.55 rg /F2 14 Tf 50 331.5 Td (3. Step by step \(do each step on all four nodes before the next\)) Tj ET
+BT 0 g /F2 11.5 Tf 50 309.5 Td (Step 0 - Clone and create the config) Tj ET
+0.94 0.95 0.97 rg 46 266.5 503 39.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 293.5 Td (git clone <repo-url> bd-search-engine && cd bd-search-engine) Tj ET
+BT 0 g /F3 8.6 Tf 50 282.5 Td (cp config/cluster.env.example config/cluster.env) Tj ET
+BT 0 g /F3 8.6 Tf 50 271.5 Td (nano config/cluster.env        # set ZT_NETWORK_ID now; node IPs after step 2) Tj ET
+BT 0 g /F2 11.5 Tf 50 243.5 Td (Step 1 - Install \(5-15 min\)) Tj ET
+0.94 0.95 0.97 rg 46 211.5 503 28.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 227.5 Td (bash scripts/01_install.sh <role>      # ingest | storage | compute | serve) Tj ET
+BT 0 g /F3 8.6 Tf 50 216.5 Td (source ~/.bigdata_env) Tj ET
+BT 0 g /F1 10 Tf 50 195.0 Td (Installs Java 11, Hadoop 3.3.6, Spark 3.3.4 and the Iceberg 1.4.3 jar \(not on node4\), plus a Python) Tj ET
+BT 0 g /F1 10 Tf 50 181.5 Td (3.10 env in ~/.venvs/bdse. Every download is checksum-verified. Tools already present in the right) Tj ET
+BT 0 g /F1 10 Tf 50 168.0 Td (version are skipped. A wrong version stops the script with a message telling you what to fix.) Tj ET
+BT 0 g /F2 11.5 Tf 50 146.0 Td (Step 2 - Join ZeroTier) Tj ET
+0.94 0.95 0.97 rg 46 125.0 503 17.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 130.0 Td (bash scripts/02_zerotier.sh) Tj ET
+BT 0 g /F1 10 Tf 50 108.5 Td (While it waits: the network owner opens my.zerotier.com -> Networks -> your network -> Members, and) Tj ET
+BT 0 g /F1 10 Tf 50 95.0 Td (ticks 'Auth' for the new member. The script prints this node's ZeroTier IP. Collect all four IPs and) Tj ET
+BT 0 g /F1 10 Tf 50 81.5 Td (fill NODE1_IP .. NODE4_IP in config/cluster.env on EVERY node. Also set NODE3_USER and) Tj ET
+BT 0 g /F1 10 Tf 50 68.0 Td (NODE3_EXPORT_DIR to the Linux user and home path on node3.) Tj ET
+BT 0.5 g /F1 8 Tf 485 25 Td (Page 1 of 3) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 6 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> >>
+endobj
+8 0 obj
+<< /Length 4914 >>
+stream
+BT 0 g /F2 11.5 Tf 50 770.0 Td (Step 3 - Hostnames) Tj ET
+0.94 0.95 0.97 rg 46 738.0 503 28.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 754.0 Td (bash scripts/03_hosts.sh) Tj ET
+BT 0 g /F3 8.6 Tf 50 743.0 Td (getent hosts node1 node2 node3 node4    # must show ZeroTier IPs, never 127.x) Tj ET
+BT 0 g /F2 11.5 Tf 50 715.0 Td (Step 4 - Render configs) Tj ET
+0.94 0.95 0.97 rg 46 694.0 503 17.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 699.0 Td (bash scripts/04_configure.sh <role>) Tj ET
+BT 0 g /F1 10 Tf 50 677.5 Td (Configs go to ~/bigdata/conf. Nothing in $SPARK_HOME/conf or $HADOOP_HOME/etc/hadoop is changed.) Tj ET
+BT 0 g /F2 11.5 Tf 50 655.5 Td (Step 5 - ssh from node4 to node3 \(for pulling exports\)) Tj ET
+0.94 0.95 0.97 rg 46 579.5 503 72.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 639.5 Td (# node3:) Tj ET
+BT 0 g /F3 8.6 Tf 50 628.5 Td (sudo service ssh start) Tj ET
+BT 0 g /F3 8.6 Tf 50 617.5 Td (# node4:) Tj ET
+BT 0 g /F3 8.6 Tf 50 606.5 Td (ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519     # skip if a key exists) Tj ET
+BT 0 g /F3 8.6 Tf 50 595.5 Td (ssh-copy-id <NODE3_USER>@node3) Tj ET
+BT 0 g /F3 8.6 Tf 50 584.5 Td (ssh <NODE3_USER>@node3 true                          # must not ask for a password) Tj ET
+BT 0 g /F2 11.5 Tf 50 556.5 Td (Step 6 - Start daemons \(in this order\)) Tj ET
+0.94 0.95 0.97 rg 46 502.5 503 50.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 540.5 Td (node2:  bash scripts/05_start.sh storage     # formats HDFS only the first time) Tj ET
+BT 0 g /F3 8.6 Tf 50 529.5 Td (node3:  bash scripts/05_start.sh compute) Tj ET
+BT 0 g /F3 8.6 Tf 50 518.5 Td (node4:  bash scripts/05_start.sh serve) Tj ET
+BT 0 g /F3 8.6 Tf 50 507.5 Td (every node:  bash scripts/doctor.sh <role>   # each line should say PASS) Tj ET
+BT 0 g /F1 10 Tf 50 486.0 Td (Web UIs: HDFS http://node2:9870 \(2 live DataNodes\) and Spark http://node3:8080 \(2 alive workers\).) Tj ET
+BT 0 g /F1 10 Tf 50 472.5 Td (Stop with bash scripts/05_stop.sh <role>. After a reboot, run 05_start.sh again \(no systemd is) Tj ET
+BT 0 g /F1 10 Tf 50 459.0 Td (used\).) Tj ET
+0.2 0.35 0.6 RG 0.8 w 50 442.0 m 545 442.0 l S
+BT 0.15 0.3 0.55 rg /F2 14 Tf 50 427.0 Td (4. Running the pipeline) Tj ET
+BT 0 g /F2 11.5 Tf 50 405.0 Td (Phase 0 - must already be serving when you arrive at the evaluation) Tj ET
+0.94 0.95 0.97 rg 46 362.0 503 39.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 389.0 Td (node1:  bash scripts/06_ingest.sh 0        # upload pages.jsonl to HDFS + ingestion job) Tj ET
+BT 0 g /F3 8.6 Tf 50 378.0 Td (node3:  bash scripts/07_compute.sh 0       # inverted index + PageRank + Parquet export) Tj ET
+BT 0 g /F3 8.6 Tf 50 367.0 Td (node4:  bash scripts/08_pull_and_serve.sh  # pull, verify, switch version) Tj ET
+BT 0 g /F1 10 Tf 50 345.5 Td (Search: open http://node4:8000/ or run curl 'http://node4:8000/search?q=computer&k=10'. Check the) Tj ET
+BT 0 g /F1 10 Tf 50 332.0 Td (live version with curl http://node4:8000/health) Tj ET
+BT 0 g /F2 11.5 Tf 50 310.0 Td (Phase 1 - triggered live during the evaluation) Tj ET
+0.94 0.95 0.97 rg 46 267.0 503 39.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 294.0 Td (node1:  bash scripts/06_ingest.sh 1) Tj ET
+BT 0 g /F3 8.6 Tf 50 283.0 Td (node3:  bash scripts/07_compute.sh 1) Tj ET
+BT 0 g /F3 8.6 Tf 50 272.0 Td (node4:  bash scripts/08_pull_and_serve.sh  # /health shows the new version) Tj ET
+BT 0 g /F1 10 Tf 50 250.5 Td (If any step fails, node4 keeps serving Phase 0: an export without _SUCCESS or with a bad checksum is) Tj ET
+BT 0 g /F1 10 Tf 50 237.0 Td (refused.) Tj ET
+BT 0 g /F2 11.5 Tf 50 215.0 Td (Idempotency test and Iceberg time travel \(any Spark node, e.g. node1\)) Tj ET
+0.94 0.95 0.97 rg 46 128.0 503 83.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 199.0 Td (bash scripts/admin.sh state            # snapshot ids + row counts + content hashes) Tj ET
+BT 0 g /F3 8.6 Tf 50 188.0 Td (bash scripts/06_ingest.sh 1            # same phase again -> status no_change) Tj ET
+BT 0 g /F3 8.6 Tf 50 177.0 Td (bash scripts/admin.sh state            # identical output = idempotent) Tj ET
+BT 0 g /F3 8.6 Tf 50 166.0 Td (bash scripts/admin.sh snapshots documents) Tj ET
+BT 0 g /F3 8.6 Tf 50 155.0 Td (bash scripts/admin.sh changes 1        # added / updated / deleted doc ids) Tj ET
+BT 0 g /F3 8.6 Tf 50 144.0 Td (bash scripts/admin.sh count documents <snapshot_id>      # time travel) Tj ET
+BT 0 g /F3 8.6 Tf 50 133.0 Td (bash scripts/admin.sh rollback documents <snapshot_id>   # undo a bad update) Tj ET
+BT 0 g /F2 11.5 Tf 50 105.0 Td (Fault tolerance demo \(node3\)) Tj ET
+0.94 0.95 0.97 rg 46 84.0 503 17.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 89.0 Td (bash scripts/fault_demo.sh        # kills a Spark worker mid-PageRank, then stops a DataNode) Tj ET
+BT 0 g /F1 10 Tf 50 67.5 Td (Expected: 'PASS: same PageRank digest after losing a worker' and 'PASS: file read intact with one) Tj ET
+BT 0 g /F1 10 Tf 50 54.0 Td (DataNode down'. See docs/FAULT_TOLERANCE.md for the settings behind this.) Tj ET
+BT 0.5 g /F1 8 Tf 485 25 Td (Page 2 of 3) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 8 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> >>
+endobj
+10 0 obj
+<< /Length 3170 >>
+stream
+BT 0 g /F2 11.5 Tf 50 770.0 Td (Final run on the main corpus) Tj ET
+BT 0 g /F1 10 Tf 50 754.5 Td (Copy the main dataset to node1 \(e.g. data/main/\) and set PHASE0_FILE / PHASE1_FILE in cluster.env.) Tj ET
+BT 0 g /F1 10 Tf 50 741.0 Td (For a clean start, on node2 run: hdfs dfs -rm -r -skipTrash /warehouse /bdse. Then run Phase 0) Tj ET
+BT 0 g /F1 10 Tf 50 727.5 Td (again.) Tj ET
+0.2 0.35 0.6 RG 0.8 w 50 710.5 m 545 710.5 l S
+BT 0.15 0.3 0.55 rg /F2 14 Tf 50 695.5 Td (5. Rehearse on one machine first \(optional\)) Tj ET
+0.94 0.95 0.97 rg 46 674.5 503 17.0 re f 0 g
+BT 0 g /F3 8.6 Tf 50 679.5 Td (bash scripts/local_demo.sh       # needs Spark, the Iceberg jar and the 3.10 env) Tj ET
+BT 0 g /F1 10 Tf 50 658.0 Td (This runs Phase 0, Phase 1, the idempotence check and the bad-export check locally under) Tj ET
+BT 0 g /F1 10 Tf 50 644.5 Td (~/bigdata/tmp/demo. Unit tests: ~/.venvs/bdse/bin/python -m pytest -q tests) Tj ET
+0.2 0.35 0.6 RG 0.8 w 50 627.5 m 545 627.5 l S
+BT 0.15 0.3 0.55 rg /F2 14 Tf 50 612.5 Td (6. Troubleshooting) Tj ET
+BT 0 g /F2 11.5 Tf 50 590.5 Td (doctor shows nodeX -> 127.0.1.1) Tj ET
+BT 0 g /F1 10 Tf 50 575.0 Td (Re-run 03_hosts.sh. On WSL set generateHosts = false \(section 2\).) Tj ET
+BT 0 g /F2 11.5 Tf 50 553.0 Td (Worker missing in Spark UI) Tj ET
+BT 0 g /F1 10 Tf 50 537.5 Td (On the worker: getent hosts node3, then doctor.sh <role> \(port 7077\). Logs: ~/bigdata/logs/spark/) Tj ET
+BT 0 g /F2 11.5 Tf 50 515.5 Td (Job stuck: 'Initial job has not accepted any resources') Tj ET
+BT 0 g /F1 10 Tf 50 500.0 Td (Executors cannot reach the driver. Re-run 04_configure.sh <role> on the driver node. Open ports) Tj ET
+BT 0 g /F1 10 Tf 50 486.5 Td (7079/7080/7090 \(sudo ufw status\). Worker memory must be >= executor memory.) Tj ET
+BT 0 g /F2 11.5 Tf 50 464.5 Td (HDFS: 'could only be written to 0 ... nodes') Tj ET
+BT 0 g /F1 10 Tf 50 449.0 Td (DataNodes not registered: hdfs dfsadmin -report, check DataNode logs in ~/bigdata/logs/hadoop/.) Tj ET
+BT 0 g /F2 11.5 Tf 50 427.0 Td (DataNode: 'Incompatible clusterIDs') Tj ET
+BT 0 g /F1 10 Tf 50 411.5 Td (NameNode was reformatted. On that DataNode: 05_stop.sh <role>; rm -rf ~/bigdata/hdfs/data;) Tj ET
+BT 0 g /F1 10 Tf 50 398.0 Td (05_start.sh <role>.) Tj ET
+BT 0 g /F2 11.5 Tf 50 376.0 Td (Out of memory / WSL freezes) Tj ET
+BT 0 g /F1 10 Tf 50 360.5 Td (Lower SPARK_EXECUTOR_MEMORY and SPARK_WORKER_MEMORY in cluster.env \(all nodes\), re-run) Tj ET
+BT 0 g /F1 10 Tf 50 347.0 Td (04_configure.sh, restart.) Tj ET
+BT 0 g /F2 11.5 Tf 50 325.0 Td ('Address already in use') Tj ET
+BT 0 g /F1 10 Tf 50 309.5 Td (ss -ltnp | grep <port>. Stop the other process or change the port in cluster.env on all nodes.) Tj ET
+BT 0 g /F2 11.5 Tf 50 287.5 Td (ZeroTier ACCESS_DENIED) Tj ET
+BT 0 g /F1 10 Tf 50 272.0 Td (Not authorized yet: tick 'Auth' for the member in my.zerotier.com.) Tj ET
+BT 0 g /F2 11.5 Tf 50 250.0 Td (08 says server refused the version) Tj ET
+BT 0 g /F1 10 Tf 50 234.5 Td (The reason \(checksum / missing _SUCCESS\) is printed. Re-run 07_compute.sh, then 08. The old version) Tj ET
+BT 0 g /F1 10 Tf 50 221.0 Td (stays live.) Tj ET
+BT 0.5 g /F1 8 Tf 485 25 Td (Page 3 of 3) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 10 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000128 00000 n 
+0000000225 00000 n 
+0000000327 00000 n 
+0000000422 00000 n 
+0000005257 00000 n 
+0000005403 00000 n 
+0000010369 00000 n 
+0000010515 00000 n 
+0000013738 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+13886
+%%EOF

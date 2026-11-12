@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini Search</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 16px; color: #222; }
+  form { display: flex; gap: .5rem; }
+  input[type=search] { flex: 1; padding: .6rem; font-size: 1rem; }
+  button { padding: .6rem 1rem; font-size: 1rem; }
+  #meta { color: #666; font-size: .85rem; margin: .75rem 0; }
+  ol { padding-left: 1.5rem; }
+  li { margin-bottom: .9rem; }
+  .url { color: #0a6b2e; font-size: .85rem; word-break: break-all; }
+  .score { color: #666; font-size: .8rem; }
+</style>
+</head>
+<body>
+<h1>Mini Search</h1>
+<form id="f">
+  <label for="q" hidden>Query</label>
+  <input id="q" type="search" placeholder="Search Simple English Wikipedia" autofocus required>
+  <button>Search</button>
+</form>
+<div id="meta" aria-live="polite"></div>
+<ol id="results"></ol>
+<script>
+const meta = document.getElementById('meta'), list = document.getElementById('results');
+fetch('/health').then(r => r.json()).then(h => meta.textContent = h.version ? `Index version ${h.version} · ${h.docs} docs` : 'No index loaded');
+document.getElementById('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const q = document.getElementById('q').value;
+  const r = await fetch(`/search?k=10&q=${encodeURIComponent(q)}`);
+  const data = await r.json();
+  list.replaceChildren();
+  if (!r.ok) { meta.textContent = data.detail || 'Search failed'; return; }
+  meta.textContent = `${data.count} results · version ${data.version}`;
+  for (const d of data.results) {
+    const li = document.createElement('li');
+    const a = Object.assign(document.createElement('a'), { href: d.url, textContent: d.title || d.doc_id });
+    const url = Object.assign(document.createElement('div'), { className: 'url', textContent: d.url });
+    const sc = Object.assign(document.createElement('div'), { className: 'score',
+      textContent: `doc ${d.doc_id} · score ${d.score} · bm25 ${d.bm25} · pagerank ${d.pagerank.toFixed(5)}` });
+    li.append(a, url, sc);
+    list.append(li);
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+data/
+*.jar
+.venv/
+venv/
+exports/
+serving/
+logs/
+*.log
+config/cluster.env
+__pycache__/
+*.pyc
+.pytest_cache/
+spark-warehouse/
+metastore_db/
+derby.log
