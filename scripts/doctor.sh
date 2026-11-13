@@ -28,11 +28,19 @@ zt_ok() {
   local line; line="$(sudo -n zerotier-cli listnetworks 2>/dev/null | grep "${ZT_NETWORK_ID:-none}" || zerotier-cli listnetworks 2>/dev/null | grep "${ZT_NETWORK_ID:-none}" || true)"
   echo "${line:-network ${ZT_NETWORK_ID:-?} not joined (or needs sudo)}"; [[ "$line" == *" OK "* ]]
 }
-resolves() { local ip; ip="$(getent hosts "$1" | awk '{print $1; exit}')"; echo "$1 -> ${ip:-unresolved}"; [ -n "$ip" ] && [[ "$ip" != 127.* ]]; }
-port_open() { timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null; }
-hdfs_report() { local live; live="$(timeout 30 "$HADOOP_HOME/bin/hdfs" dfsadmin -report 2>/dev/null | awk -F'[()]' '/Live datanodes/{print $2}')"; echo "live datanodes: ${live:-?}"; [ "${live:-0}" -ge 2 ]; }
+resolves() { local ip; ip="$(host_ip "$1")"; echo "$1 -> ${ip:-unresolved}"; [ -n "$ip" ] && [[ "$ip" != 127.* ]]; }
+port_open() { run_timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null; }
+hdfs_report() { local live; live="$(run_timeout 30 "$HADOOP_HOME/bin/hdfs" dfsadmin -report 2>/dev/null | awk -F'[()]' '/Live datanodes/{print $2}')"; echo "live datanodes: ${live:-?}"; [ "${live:-0}" -ge 2 ]; }
 spark_ui() { local w; w="$(curl -sf --max-time 5 "http://node3:${SPARK_MASTER_WEBUI_PORT}/json/" | grep -o '"aliveworkers" *: *[0-9]*' | grep -o '[0-9]*$')"; echo "alive workers: ${w:-unreachable}"; [ "${w:-0}" -ge 2 ]; }
-free_mem() { local m; m="$(awk '/MemAvailable/{printf "%d", $2/1024}' /proc/meminfo)"; echo "${m} MiB available"; [ "$m" -ge 1536 ]; }
+# macOS has no MemAvailable; free + inactive + speculative pages is the closest equivalent
+mem_avail_mib() {
+  if [ "$(os_name)" = Darwin ]; then
+    vm_stat | awk -v ps="$(sysctl -n hw.pagesize)" '/^Pages (free|inactive|speculative):/ {sub(/\./, "", $NF); n += $NF} END {printf "%d", n * ps / 1048576}'
+  else
+    awk '/MemAvailable/{printf "%d", $2/1024}' /proc/meminfo
+  fi
+}
+free_mem() { local m; m="$(mem_avail_mib)"; echo "${m} MiB available"; [ "$m" -ge 1536 ]; }
 
 echo "== doctor: role $ROLE (node$N) on $(hostname)"
 SPARK_PY_CHECK="${SPARK_PY:-$BDSE_VENV/bin/python}"

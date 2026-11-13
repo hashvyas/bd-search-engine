@@ -47,6 +47,18 @@ The spec PDF is not in the repo; teammates get it from the course site.
 - **fault_demo.sh** runs on node3 and by default kills node3's own worker and DataNode, so it needs no ssh. `fault_demo.sh node2` kills the remote worker over ssh.
 - **`ICEBERG_NAMESPACE`** defaults to `search`, so tables are `iceberg_catalog.search.*`.
 
+## macOS node4
+- **Serve role only.** node4 runs no Spark or HDFS, so `01_install.sh` installs only uv and the Python 3.10 venv (`BDSE_VENV`, default `~/.venvs/bdse`) on macOS. It stops on any other role. The full `requirements.txt` is installed: it holds no Spark packages (PySpark comes from `$SPARK_HOME`), and pytest/httpx let the serve tests run on the Mac.
+- **uv for macOS** is the pinned `UV_VERSION`, built from the Darwin asset name (`uv-aarch64-apple-darwin` or `uv-x86_64-apple-darwin`) and checked against its published `.sha256` like the Linux one. Without `sha256sum`, checksums use `shasum -a <bits>`.
+- **Linux output unchanged.** Every macOS change sits behind `os_name = Darwin` or a `command -v` check that picks the GNU tool first (`getent`, `timeout`, `sha256sum`). On Linux, 01–04 write the same files. The `03_hosts.sh` sed expression was checked to be byte-identical to the old one on Linux.
+- **Portable helpers** in `lib.sh`: `os_name`, `sha256_of`, `run_timeout` (timeout, then gtimeout, then `perl alarm` + `exec`, which exits 142 rather than 124 on timeout), `host_ip` (getent, then dscacheutil, then `/etc/hosts`).
+- **Memory on macOS** = (free + inactive + speculative pages) × `hw.pagesize`, read from `vm_stat` and `sysctl`. This is the closest match to Linux `MemAvailable`. The 1.5 GiB threshold is unchanged.
+- **`03_hosts.sh` on macOS** uses `[[:<:]]`/`[[:>:]]` word boundaries (BSD sed has no `\b`) and flushes the DNS cache (`dscacheutil -flushcache`, `killall -HUP mDNSResponder`) so the new entries take effect.
+- **`02_zerotier.sh` on macOS** does not run the Linux installer. It asks for the official `.pkg`, which also sets up the launchd service.
+- **caffeinate -i -w <pid>** starts after `/health` answers. It stops idle sleep only. Closing the lid still sleeps the Mac (documented in the runbook). It is not started again when `serve_start` finds the API already running.
+- **ssh errors in `do_pull`.** If reading `LATEST` over BatchMode ssh fails, a second `ssh ... true` tells an auth failure (print the fix commands) from a missing `LATEST`. The extra ssh call runs only on that failure path, so a working Linux pull makes the same calls as before.
+- **Not run on a Mac.** All of the above was written for macOS but checked only on Windows Git Bash (bash 5): `bash -n`, a grep for bash-4/GNU-only constructs, and the fallback commands run by hand. The perl alarm fallback could not be checked there, because MSYS emulates exec.
+
 ## Verified on the reference machine (WSL, LOCAL_MODE)
 `scripts/local_demo.sh` passed end to end on data/toy.
 - Phase 0: 1040 lines read, 20 rejected (malformed), 20 duplicates, 1000 live docs.

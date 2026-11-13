@@ -5,6 +5,7 @@ load_env
 [[ "${ZT_NETWORK_ID:-}" =~ ^[0-9a-fA-F]{16}$ ]] || die "set ZT_NETWORK_ID (16 hex chars) in config/cluster.env"
 
 if ! command -v zerotier-cli >/dev/null; then
+  [ "$(os_name)" != Darwin ] || die "install ZeroTier for macOS from https://www.zerotier.com/download/ (the .pkg), then re-run this script"
   log "installing ZeroTier"
   curl -fsSL https://install.zerotier.com -o /tmp/zt-install.sh
   sudo bash /tmp/zt-install.sh

@@ -21,7 +21,8 @@ download_verified() {
   curl -fL --retry 3 -o "$dest" "$url"
   curl -fsL --retry 3 -o "$dest.$algo" "$url.$algo"
   expected="$(checksum_from "$dest.$algo" "$len")"
-  actual="$("${algo}sum" "$dest" | cut -d' ' -f1)"
+  if command -v "${algo}sum" >/dev/null; then actual="$("${algo}sum" "$dest" | cut -d' ' -f1)"
+  else actual="$(shasum -a "${algo#sha}" "$dest" | cut -d' ' -f1)"; fi
   [ -n "$expected" ] && [ "$expected" = "$actual" ] || die "$algo mismatch for $(basename "$dest"): expected $expected got $actual"
   log "$algo verified: $(basename "$dest")"
 }
@@ -147,12 +148,25 @@ export PATH="\$HOME/.local/bin:${SPARK_HOME:+$SPARK_HOME/bin:$SPARK_HOME/sbin:}$
 EOF
   grep -q '\.bigdata_env' "$HOME/.bashrc" 2>/dev/null \
     || echo '[ -f "$HOME/.bigdata_env" ] && . "$HOME/.bigdata_env"' >> "$HOME/.bashrc"
-  log "wrote ~/.bigdata_env (sourced from ~/.bashrc)"
+  if [ "$(os_name)" = Darwin ]; then
+    grep -q '\.bigdata_env' "$HOME/.zshrc" 2>/dev/null \
+      || echo '[ -f "$HOME/.bigdata_env" ] && . "$HOME/.bigdata_env"' >> "$HOME/.zshrc"
+    log "wrote ~/.bigdata_env (sourced from ~/.zshrc and ~/.bashrc)"
+  else
+    log "wrote ~/.bigdata_env (sourced from ~/.bashrc)"
+  fi
 }
 
 log "installing role '$ROLE'"
-apt_install curl ca-certificates rsync openssh-client gettext-base
-[ "$ROLE" = compute ] && apt_install openssh-server
+if [ "$(os_name)" = Darwin ]; then
+  [ "$ROLE" = serve ] || die "macOS supports only the serve role (node4). Run role '$ROLE' on Ubuntu 24.04 or WSL2."
+  log "macOS detected: serve role only, no Java, Hadoop or Spark. Python env at $BDSE_VENV"
+  for c in curl rsync ssh; do command -v "$c" >/dev/null || die "$c not found (run: xcode-select --install)"; done
+  UV_URL="https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$(uname -m | sed 's/^arm64$/aarch64/')-apple-darwin.tar.gz"
+else
+  apt_install curl ca-certificates rsync openssh-client gettext-base
+  if [ "$ROLE" = compute ]; then apt_install openssh-server; fi
+fi
 
 if [ $SPARK_ROLE = 1 ]; then
   install_java

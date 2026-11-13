@@ -1,6 +1,6 @@
 # Runbook: from clone to a working search
 
-Four Ubuntu 24.04 machines (VMs or WSL2), joined by ZeroTier.
+Four Ubuntu 24.04 machines (VMs or WSL2), joined by ZeroTier. node4 may instead be a Mac: see [macOS node4](#macos-node4-serve-only).
 
 | Node | Role arg | Runs |
 |---|---|---|
@@ -121,6 +121,47 @@ Copy the main dataset to node1 (for example `data/main/`). Set `PHASE0_FILE` and
 `bash scripts/local_demo.sh` runs the whole flow with `LOCAL_MODE=1` (no HDFS, local Spark) under `~/bigdata/tmp/demo`. It needs Spark plus the Iceberg jar and a Python with fastapi, uvicorn and pyarrow (`SERVE_PY=...`).
 
 Tests: `~/.venvs/bdse/bin/python -m pytest -q tests` (Spark tests need `SPARK_HOME`).
+
+## macOS node4 (serve only)
+A Mac can run the `serve` role only (FastAPI, uvicorn, pyarrow). It runs no Java, Hadoop or Spark. `01_install.sh` refuses any other role on macOS. The serve scripts (`lib.sh`, `05_start.sh`, `05_stop.sh`, `08_pull_and_serve.sh`, `doctor.sh`) run with the stock `/bin/bash` 3.2. Run them as `bash scripts/...` from zsh.
+
+**Local edits to `01_install.sh`?** If you added your own macOS changes before this was merged, keep a copy, then take the repo version:
+```bash
+git stash && git pull && git stash show -p   # compare your edits with the merged version
+git stash drop                                # once nothing in your edits is missing
+```
+
+**Steps, in place of steps 1 to 5 on node4:**
+```bash
+xcode-select --install                 # only if curl, rsync or ssh are missing
+bash scripts/01_install.sh serve       # uv + Python 3.10 venv at ~/.venvs/bdse, writes ~/.bigdata_env
+source ~/.bigdata_env                  # zsh and bash both source it from now on
+```
+ZeroTier: install the macOS `.pkg` from https://www.zerotier.com/download/ first, then `bash scripts/02_zerotier.sh` as on the other nodes.
+```bash
+bash scripts/03_hosts.sh               # asks for your password (sudo), flushes the macOS DNS cache
+dscacheutil -q host -a name node3      # macOS has no getent; must show node3's ZeroTier IP
+bash scripts/04_configure.sh serve
+```
+
+**ssh to node3** (`ssh-copy-id` ships with recent macOS; the `else` branch covers Macs without it):
+```bash
+[ -f ~/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519
+if command -v ssh-copy-id >/dev/null; then ssh-copy-id <NODE3_USER>@node3
+else cat ~/.ssh/id_ed25519.pub | ssh <NODE3_USER>@node3 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'; fi
+ssh -o BatchMode=yes <NODE3_USER>@node3 true   # must print nothing and not ask for a password
+```
+If this ssh fails later, `08_pull_and_serve.sh` prints these same commands.
+
+**Start and serve:**
+```bash
+bash scripts/05_start.sh serve
+bash scripts/doctor.sh serve
+bash scripts/08_pull_and_serve.sh
+```
+- **Firewall prompt.** The first start binds `0.0.0.0:8000`. If the macOS firewall is on, it asks *"Do you want the application "python3.10" to accept incoming network connections?"* Click **Allow**. If you clicked Deny, open System Settings → Network → Firewall → Options, set the Python entry to "Allow incoming connections", then run `05_stop.sh serve` and `05_start.sh serve` again. Check from another node: `curl http://node4:8000/health`.
+- **Sleep.** `05_start.sh serve` starts `caffeinate -i -w <api pid>`, which stops idle sleep while the API runs and exits when the API stops. It does not stop sleep when the lid closes: keep the lid open and the charger plugged in during the evaluation. Check with `pmset -g assertions | grep caffeinate`.
+- **Ports in use:** `lsof -nP -iTCP:8000 -sTCP:LISTEN` (macOS has no `ss`).
 
 ## Troubleshooting
 | Symptom | Fix |

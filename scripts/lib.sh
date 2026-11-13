@@ -5,6 +5,38 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
+# Portability helpers: node4 may be macOS (bash 3.2, no getent, timeout or sha256sum).
+os_name() { uname -s; }
+
+sha256_of() {
+  if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
+}
+
+run_timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null; then timeout "$secs" "$@"
+  elif command -v gtimeout >/dev/null; then gtimeout "$secs" "$@"
+  # the alarm survives exec, so SIGALRM kills the command after $secs
+  else perl -e 'alarm shift; exec @ARGV or exit 127' "$secs" "$@"; fi
+}
+
+host_ip() {
+  if command -v getent >/dev/null; then getent hosts "$1" | awk '{print $1; exit}'
+  elif command -v dscacheutil >/dev/null; then dscacheutil -q host -a name "$1" | awk '/^ip_address:/{print $2; exit}'
+  else awk -v h="$1" '$1 !~ /^#/ {for (i = 2; i <= NF; i++) if ($i == h) {print $1; exit}}' /etc/hosts; fi
+}
+
+ssh_fix_hint() {
+  local r="$1"
+  log "passwordless ssh to $r does not work. Fix it on this node, then re-run:"
+  printf '%s\n' \
+    "  [ -f ~/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519" \
+    "  ssh-copy-id $r" \
+    "  # without ssh-copy-id, use this instead:" \
+    "  cat ~/.ssh/id_ed25519.pub | ssh $r 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'" \
+    "  ssh -o BatchMode=yes $r true   # must succeed without a password prompt" >&2
+}
+
 role_node() {
   case "$1" in
     ingest) echo 1 ;; storage) echo 2 ;; compute) echo 3 ;; serve) echo 4 ;;
@@ -98,7 +130,7 @@ do_ingest() {
   case "$file" in /*) ;; *) file="$REPO_ROOT/$file" ;; esac
   [ -f "$file" ] || die "input file not found: $file"
   local hash name dest
-  hash="$(sha256sum "$file" | cut -d' ' -f1)"
+  hash="$(sha256_of "$file")"
   name="$(basename "$file")"
   dest="$DATA_ROOT/raw/phase=$phase/$name"
   log "phase $phase: uploading $name (sha256 ${hash:0:12}...) to $dest"
@@ -133,7 +165,10 @@ do_pull() {
     [ -n "${NODE3_USER:-}" ] || die "set NODE3_USER in config/cluster.env (run 'whoami' on node3)"
     : "${NODE3_EXPORT_DIR:=/home/$NODE3_USER/bigdata/exports}"
     local remote="${NODE3_USER}@node3"
-    [ -n "$version" ] || version="$(ssh -o BatchMode=yes "$remote" cat "$NODE3_EXPORT_DIR/LATEST")"
+    if [ -z "$version" ] && ! version="$(ssh -o BatchMode=yes "$remote" cat "$NODE3_EXPORT_DIR/LATEST")"; then
+      ssh -o BatchMode=yes "$remote" true 2>/dev/null || { ssh_fix_hint "$remote"; die "cannot ssh to $remote"; }
+      die "could not read $NODE3_EXPORT_DIR/LATEST on $remote (has 07_compute.sh exported yet?)"
+    fi
     src="$remote:$NODE3_EXPORT_DIR/$version/"
   fi
   valid_version "$version" || die "bad version name '$version'"
@@ -177,7 +212,15 @@ serve_start() {
    echo $! > "$pidf")
   local i
   for i in $(seq 1 30); do
-    curl -sf "http://127.0.0.1:$SERVE_PORT/health" >/dev/null 2>&1 && { log "search API is up"; return; }
+    if curl -sf "http://127.0.0.1:$SERVE_PORT/health" >/dev/null 2>&1; then
+      log "search API is up"
+      if [ "$(os_name)" = Darwin ]; then
+        # caffeinate exits by itself when the API pid dies, so serve_stop needs nothing extra
+        nohup caffeinate -i -w "$(cat "$pidf")" >/dev/null 2>&1 &
+        log "caffeinate -i keeps the Mac awake while pid $(cat "$pidf") runs"
+      fi
+      return
+    fi
     sleep 1
   done
   die "search API did not start; see $LOG_DIR/search-api.log"
