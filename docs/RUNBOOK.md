@@ -19,7 +19,7 @@ nano config/cluster.env        # ZT_NETWORK_ID now. The NODEx_IP values come aft
 ```
 The values in `cluster.env` must be **identical on all four nodes**. It is gitignored, so share it in your team chat. Set `NODE3_USER` to the output of `whoami` on node3.
 
-**node1 only:** `data/` is not in git. Put the course dataset in `data/toy/` (`pages.jsonl`, `changes.json`), or point `PHASE0_FILE`/`PHASE1_FILE` at your copies.
+**node1 only:** `data/toy/` (`pages.jsonl`, `changes.json`) is in git. Other folders under `data/` are not (too large), so put the course dataset there, or point `PHASE0_FILE`/`PHASE1_FILE` at your copies.
 
 **WSL2 only, once per machine** (from inside WSL):
 ```bash
